@@ -14,16 +14,8 @@ from settings import sender_email, sender_password, receiver_email, smtp_server,
 today = date.today().strftime("%d.%m.%Y")
 
 current_file_name = f'web_moderation_{today}.csv'
-current_file_path = f'{file_path}_{current_file_name}.csv'
+current_file_path = f'{file_path}_{current_file_name}'
 current_email_subject = f'{email_subject} {today}'
-
-
-def attach_file_to_email(email, file_name):
-    """Attach a file identified by filename to email message"""
-    with open(file_name, 'rb') as file:
-        file_data = MIMEApplication(file.read(), _subtype=file_name.split(".")[-1])
-        file_data.add_header('Content-Disposition', 'attachment', filename=file_name)
-        email.attach(file_data)
 
 
 def main():
