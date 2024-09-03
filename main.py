@@ -1,5 +1,4 @@
-from email.mime.application import MIMEApplication
-
+import os
 import requests as requests
 from datetime import date
 import smtplib
@@ -14,11 +13,12 @@ from settings import sender_email, sender_password, receiver_email, smtp_server,
 today = date.today().strftime("%d.%m.%Y")
 
 current_file_name = f'web_moderation_{today}.csv'
-current_file_path = f'{file_path}_{current_file_name}'
+current_file_path = f'{file_path}/{today}/{current_file_name}'
 current_email_subject = f'{email_subject} {today}'
 
 
 def main():
+    os.mkdir(f'{file_path}\\{today}')
     response = requests.get(report_file_url)
     print(current_file_name)
 
@@ -44,7 +44,11 @@ def main():
         print(f'Email "{current_email_subject}" отправлен')
 
     print('Нажмите что-то для завершения работы скрипта')
-    death = input()
+    input()
+
 
 if __name__ == '__main__':
-    main()
+    if os.path.exists(f'{file_path}/{today}'):
+        print('Отчет уже сформирован и должен был быть отправлен. Если этого не произошло, повторите отправку вручную')
+    else:
+        main()
