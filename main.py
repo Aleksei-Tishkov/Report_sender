@@ -5,37 +5,62 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
+import pandas as pd
 
-from settings import sender_email, sender_password, receiver_email, smtp_server, report_file_url, file_path, \
-    email_subject
+from settings import sender_email, sender_password, receiver_email, smtp_server, report_app_file_url,\
+    report_web_file_url, file_path, email_subject
 
 
 today = date.today().strftime("%d.%m.%Y")
 
-current_file_name = f'web_moderation_{today}.csv'
-current_file_path = f'{file_path}/{today}/{current_file_name}'
+current_web_file_name = f'web_moderation_{today}.csv'
+current_web_file_path = f'{file_path}/{today}/{current_web_file_name}'
+current_app_file_name = f'app_moderation_{today}.csv'
+current_app_file_path = f'{file_path}/{today}/{current_app_file_name}'
 current_email_subject = f'{email_subject} {today}'
 
 
 def main():
     os.mkdir(f'{file_path}\\{today}')
-    response = requests.get(report_file_url)
-    print(current_file_name)
+    app_response = requests.get(report_app_file_url)
+    web_response = requests.get(report_web_file_url)
+    print(current_web_file_name)
+    print(current_app_file_name)
 
     message = MIMEMultipart()
     message['From'] = sender_email
     message['To'] = receiver_email
     message['Subject'] = current_email_subject
 
-    attachment = MIMEBase('application', 'octet-stream')
-    with open(current_file_path, 'wb') as file:
-        file.write(response.content)
-    with open(current_file_path, 'rb') as file:
-        attachment.set_payload(file.read())
-    print(f'Файл {current_file_path} успешно создан')
-    encoders.encode_base64(attachment)
-    attachment.add_header('Content-Disposition', f'attachment; filename={current_file_name}')
-    message.attach(attachment)
+    app_attachment = MIMEBase('application', 'octet-stream')
+    web_attachment = MIMEBase('application', 'octet-stream')
+    with open(current_web_file_path, 'wb') as file:
+        file.write(web_response.content)
+
+    with open(current_web_file_path, 'rb') as file:
+        df = pd.read_csv(file)
+        if len(df.index):  # Условие проверки на не-пустой файл
+            web_attachment.set_payload(file.read())
+            print(df.head())
+            print(f'Файл {current_web_file_path} успешно создан')
+            encoders.encode_base64(web_attachment)
+            web_attachment.add_header('Content-Disposition', f'attachment; filename={current_web_file_name}')
+            message.attach(web_attachment)
+        else:
+            print(f'C файлом {current_web_file_path} что-то не так, проверьте')
+    with open(current_app_file_path, 'wb') as file:
+        file.write(app_response.content)
+    with open(current_app_file_path, 'rb') as file:
+        df = pd.read_csv(file)
+        if len(df.index):  # Условие проверки на не-пустой файл
+            app_attachment.set_payload(file.read())
+            print(df.head())
+            print(f'Файл {current_app_file_path} успешно создан')
+            encoders.encode_base64(app_attachment)
+            app_attachment.add_header('Content-Disposition', f'attachment; filename={current_app_file_name}')
+            message.attach(app_attachment)
+        else:
+            print(f'C файлом {current_app_file_path} что-то не так, проверьте')
 
     with smtplib.SMTP(smtp_server, 587) as server:
         server.starttls()
