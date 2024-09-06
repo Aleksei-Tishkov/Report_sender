@@ -10,13 +10,32 @@ import pandas as pd
 import settings
 
 
-today = date.today().strftime("%d.%m.%Y")
+today = date.today()
 
-other_web_file_name = f'web_moderation_{today}.csv'
+if today.weekday() == 0:
+    report_web_file_solta_url = settings.report_web_file_solta_weekends_url
+    report_app_file_solta_url = settings.report_app_file_solta_weekends_url
+    report_web_file_other_url = settings.report_web_file_other_weekends_url
+    report_app_file_other_url = settings.report_web_file_other_weekends_url
+else:
+    report_web_file_solta_url = settings.report_web_file_solta_weekdays_url
+    report_app_file_solta_url = settings.report_app_file_solta_weekdays_url
+    report_web_file_other_url = settings.report_web_file_other_weekdays_url
+    report_app_file_other_url = settings.report_web_file_other_weekdays_url
+
+today = today.strftime("%d.%m.%Y")
+
+other_web_file_name = f'other_web_moderation_{today}.csv'
 other_web_file_path = f'{settings.file_path}/{today}/{other_web_file_name}'
-other_app_file_name = f'app_moderation_{today}.csv'
+other_app_file_name = f'other_app_moderation_{today}.csv'
 other_app_file_path = f'{settings.file_path}/{today}/{other_app_file_name}'
-email_subject = settings.email_subject
+
+solta_web_file_name = f'solta_web_moderation_{today}.csv'
+solta_web_file_path = f'{settings.file_path}/{today}/{other_web_file_name}'
+solta_app_file_name = f'solta_app_moderation_{today}.csv'
+solta_app_file_path = f'{settings.file_path}/{today}/{other_app_file_name}'
+
+email_subject = f'{settings.email_subject} {today}'
 
 file_path = f'{settings.file_path}//{today}'
 
@@ -43,13 +62,20 @@ def process_and_attach(message, path, response, name):
 
 def main():
     os.mkdir(f'{settings.file_path}\\{today}')
-    other_web_response = requests.get(settings.report_web_file_other_url)
-    other_app_response = requests.get(settings.report_app_file_other_url)
+
+    solta_web_response = requests.get(report_web_file_solta_url)
+    solta_app_response = requests.get(report_app_file_solta_url)
+
+    other_web_response = requests.get(report_web_file_other_url)
+    other_app_response = requests.get(report_app_file_other_url)
 
     message = MIMEMultipart()
     message['From'] = settings.sender_email
     message['To'] = settings.receiver_email
     message['Subject'] = email_subject
+
+    # process_and_attach(message, solta_app_file_path, solta_app_response, solta_app_file_name)
+    # process_and_attach(message, solta_web_file_path, solta_web_response, solta_web_file_name)
 
     process_and_attach(message, other_app_file_path, other_app_response, other_app_file_name)
     process_and_attach(message, other_web_file_path, other_web_response, other_web_file_name)
