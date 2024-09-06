@@ -7,73 +7,65 @@ from email.mime.base import MIMEBase
 from email import encoders
 import pandas as pd
 
-from settings import sender_email, sender_password, receiver_email, smtp_server, report_app_file_url,\
-    report_web_file_url, file_path, email_subject
+import settings
 
 
 today = date.today().strftime("%d.%m.%Y")
 
-current_web_file_name = f'web_moderation_{today}.csv'
-current_web_file_path = f'{file_path}/{today}/{current_web_file_name}'
-current_app_file_name = f'app_moderation_{today}.csv'
-current_app_file_path = f'{file_path}/{today}/{current_app_file_name}'
-current_email_subject = f'{email_subject} {today}'
+other_web_file_name = f'web_moderation_{today}.csv'
+other_web_file_path = f'{settings.file_path}/{today}/{other_web_file_name}'
+other_app_file_name = f'app_moderation_{today}.csv'
+other_app_file_path = f'{settings.file_path}/{today}/{other_app_file_name}'
+email_subject = settings.email_subject
+
+file_path = f'{settings.file_path}//{today}'
+
+
+def process_and_attach(message, path, response, name):
+    with open(path, 'wb') as file:
+        file.write(response.content)
+
+    attachment = MIMEBase('application', 'octet-stream')
+
+    with open(path, 'rb') as file:
+        df = pd.read_csv(file)
+        if len(df.index):  # Условие проверки на не-пустой файл
+            file.seek(0)
+            attachment.set_payload(file.read())
+            print(df.head())
+            print(f'Файл {path} успешно создан')
+            encoders.encode_base64(attachment)
+            attachment.add_header('Content-Disposition', f'attachment; filename={name}')
+            message.attach(attachment)
+        else:
+            print(f'C файлом {path} что-то не так, проверьте')
 
 
 def main():
-    os.mkdir(f'{file_path}\\{today}')
-    app_response = requests.get(report_app_file_url)
-    web_response = requests.get(report_web_file_url)
-    print(current_web_file_name)
-    print(current_app_file_name)
+    os.mkdir(f'{settings.file_path}\\{today}')
+    other_web_response = requests.get(settings.report_web_file_other_url)
+    other_app_response = requests.get(settings.report_app_file_other_url)
 
     message = MIMEMultipart()
-    message['From'] = sender_email
-    message['To'] = receiver_email
-    message['Subject'] = current_email_subject
+    message['From'] = settings.sender_email
+    message['To'] = settings.receiver_email
+    message['Subject'] = email_subject
 
-    app_attachment = MIMEBase('application', 'octet-stream')
-    web_attachment = MIMEBase('application', 'octet-stream')
-    with open(current_web_file_path, 'wb') as file:
-        file.write(web_response.content)
+    process_and_attach(message, other_app_file_path, other_app_response, other_app_file_name)
+    process_and_attach(message, other_web_file_path, other_web_response, other_web_file_name)
 
-    with open(current_web_file_path, 'rb') as file:
-        df = pd.read_csv(file)
-        if len(df.index):  # Условие проверки на не-пустой файл
-            web_attachment.set_payload(file.read())
-            print(df.head())
-            print(f'Файл {current_web_file_path} успешно создан')
-            encoders.encode_base64(web_attachment)
-            web_attachment.add_header('Content-Disposition', f'attachment; filename={current_web_file_name}')
-            message.attach(web_attachment)
-        else:
-            print(f'C файлом {current_web_file_path} что-то не так, проверьте')
-    with open(current_app_file_path, 'wb') as file:
-        file.write(app_response.content)
-    with open(current_app_file_path, 'rb') as file:
-        df = pd.read_csv(file)
-        if len(df.index):  # Условие проверки на не-пустой файл
-            app_attachment.set_payload(file.read())
-            print(df.head())
-            print(f'Файл {current_app_file_path} успешно создан')
-            encoders.encode_base64(app_attachment)
-            app_attachment.add_header('Content-Disposition', f'attachment; filename={current_app_file_name}')
-            message.attach(app_attachment)
-        else:
-            print(f'C файлом {current_app_file_path} что-то не так, проверьте')
-
-    with smtplib.SMTP(smtp_server, 587) as server:
+    with smtplib.SMTP(settings.smtp_server, 587) as server:
         server.starttls()
-        server.login(sender_email, sender_password)
-        server.sendmail(sender_email, receiver_email, message.as_string())
-        print(f'Email "{current_email_subject}" отправлен')
+        server.login(settings.sender_email, settings.sender_password)
+        server.sendmail(settings.sender_email, settings.receiver_email, message.as_string())
+        print(f'Email "{email_subject}" отправлен')
 
     print('Нажмите что-то для завершения работы скрипта')
     input()
 
 
 if __name__ == '__main__':
-    if os.path.exists(f'{file_path}/{today}'):
+    if os.path.exists(f'{settings.file_path}/{today}'):
         print('Отчет уже сформирован и должен был быть отправлен. Если этого не произошло, повторите отправку вручную')
     else:
         main()
