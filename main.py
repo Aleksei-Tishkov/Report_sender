@@ -31,8 +31,7 @@ file_path = f'{settings.file_path}\\Reports\\'
 message_high_text = settings.message_high_text
 message_low_text = settings.message_low_text
 
-
-logging.basicConfig(filename=f'{settings.file_path}//process_log.txt', level=logging.INFO,
+logging.basicConfig(filename=os.path.join(settings.script_dir, 'process_log.txt'), level=logging.INFO,
                     format='%(asctime)s - %(message)s')
 
 high_priority_count = 0
@@ -136,7 +135,7 @@ def main():
         else:
             logging.info(f'Low-priority e-mail is NOT sent')
             print(f'Low-priority e-mail за {today} не отправлен - отчеты пусты')
-    logging.info('script ended successfully')
+    logging.info('Process finished successfully' + '-' * 100)
     print('Нажмите что-то для завершения работы скрипта')
     input()
 
