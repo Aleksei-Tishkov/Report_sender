@@ -1,4 +1,6 @@
 import os
+
+import pandas
 import requests as requests
 from datetime import date
 import smtplib
@@ -13,29 +15,42 @@ import logging
 import settings
 
 
-today = date.today()
+def update_log_files():
+    df = pd.read_excel(excel_path)
 
-if today.weekday() == 0:
-    report_web_file_url = settings.report_web_file_weekends_url
-    report_app_file_url = settings.report_app_file_weekends_url
-else:
-    report_web_file_url = settings.report_web_file_weekdays_url
-    report_app_file_url = settings.report_app_file_weekdays_url
+    new_row = pd.DataFrame(excel_d, index=[0])
+    df = pd.concat([df, new_row], ignore_index=True)
 
-today = today.strftime("%d.%m.%Y")
+    df.to_excel(excel_path, index=False)
+    logging.info(f"Updated excel_log.xlsx with new row for {today}")
+    with open(txt_path, 'a') as file:
+        file.write(f"{today}\n"
+                   f"-----------------------\n"
+                   f"Solta web высокий приоритет: {excel_d['Solta_web_high']} строк\n"
+                   f"Solta inapp высокий приоритет: {excel_d['Solta_inapp_high']} строк\n"
+                   f"Other web высокий приоритет: {excel_d['Other_web_high']} строк\n"
+                   f"Other inapp высокий приоритет: {excel_d['Other_inapp_high']} строк\n"
+                   f"Solta web пониженный приоритет: {excel_d['Solta_web_low']} строк\n"
+                   f"Solta inapp пониженный приоритет: {excel_d['Solta_inapp_low']} строк\n"
+                   f"Other web пониженный приоритет: {excel_d['Other_web_low']} строк\n"
+                   f"Other inapp пониженный приоритет: {excel_d['Other_inapp_low']} строк\n")
 
-email_subject = f'{settings.email_subject}{today}'
 
-file_path = f'{settings.file_path}\\Reports\\'
+def process_df(df: pandas.DataFrame):
+    first_group = df.groupby(['adomain', 'dcid']).agg({
+        'dcrid': lambda x: '\n'.join(x),
+        'count': 'sum'
+    }).reset_index()
 
-message_high_text = settings.message_high_text
-message_low_text = settings.message_low_text
+    second_group = first_group.groupby(['adomain']).agg({
+        'dcid': lambda x: '\n'.join(sorted(set(map(str, x)))),  # Преобразование dcid в строку
+        'dcrid': lambda x: '\n'.join(sorted(set('\n'.join(x).split('\n')))),  # Обработка dcrid
+        'count': 'sum'
+    }).reset_index()
 
-logging.basicConfig(filename=os.path.join(settings.script_dir, 'process_log.txt'), level=logging.INFO,
-                    format='%(asctime)s - %(message)s')
+    result = second_group.sort_values(by='count', ascending=False)
 
-high_priority_count = 0
-low_priority_count = 0
+    return result
 
 
 def check_and_attach(message, d):
@@ -69,34 +84,50 @@ def process_and_attach(message_high, message_low, path, tp):
 
     df = pd.read_csv(StringIO(response.text))
 
-    df_solta = df[df['dsp'] == 'solta'].iloc[:, 1:]
-    df_other = df[df['dsp'] == 'other'].iloc[:, 1:]
+    df_solta = process_df(df[df['dsp'] == 'solta'].iloc[:, 1:])
+    df_other = process_df(df[df['dsp'] == 'other'].iloc[:, 1:])
 
-    df_other_high = df_other[df_other['count'] >= 100]
-    df_other_low = df_other[df_other['count'] < 100]
+    df_other_high = process_df(df_other[df_other['count'] >= 100])
+    df_other_low = process_df(df_other[df_other['count'] < 100])
+
     high_priority_rows = len(df_other_high)
-    logging.info(f"Other {tp} high-priority report contains {high_priority_rows} rows")
+    excel_d[f'Other_{tp}_high'] = high_priority_rows
     high_priority_count += high_priority_rows
+    logging.info(f"Other {tp} high-priority report contains {high_priority_rows} rows")
+
     low_priority_rows = len(df_other_low)
-    logging.info(f"Other DSPs {tp} low-priority report contains {low_priority_rows} rows")
+    excel_d[f'Other_{tp}_low'] = low_priority_rows
     low_priority_count += low_priority_rows
-    if len(df_other_high):
-        flag_high = True
-    if len(df_other_low):
-        flag_low = True
+    logging.info(f"Other DSPs {tp} low-priority report contains {low_priority_rows} rows")  # TODO validation
 
     df_solta_high = df_solta[df_solta['count'] >= 25]
     df_solta_low = df_solta[df_solta['count'] < 25]
-    logging.info(f"Solta {tp} high-priority report contains {len(df_solta_high)} rows")
-    logging.info(f"Solta DSPs {tp} low-priority report contains {len(df_solta_low)} rows")
+
+    high_priority_rows = len(df_solta_high)
+    excel_d[f'Solta_{tp}_high'] = high_priority_rows
+    high_priority_count += high_priority_rows
+    logging.info(f"Solta {tp} high-priority report contains {high_priority_rows} rows")
+
+    low_priority_rows = len(df_solta_low)
+    excel_d[f'Solta_{tp}_low'] = low_priority_rows
+    low_priority_count += low_priority_rows
+    logging.info(f"Solta DSPs {tp} low-priority report contains {low_priority_rows} rows")
 
     check_and_attach(message_high, {f'solta_{tp}_high': df_solta_high, f'other_{tp}_high': df_other_high})
     check_and_attach(message_low, {f'solta_{tp}_low': df_solta_low, f'other_{tp}_low': df_other_low})
+
+    if len(df_other_high) or len(df_solta_high):
+        flag_high = True
+    if len(df_other_low) or len(df_solta_low):
+        flag_low = True
 
     return flag_high, flag_low
 
 
 def main():
+    if os.path.exists(f'{file_path}/{today}'):
+        input('Отчет уже сформирован и должен был быть отправлен. Если этого не произошло, повторите отправку вручную')
+        return
     os.mkdir(f'{file_path}\\{today}')
 
     message_high = MIMEMultipart()
@@ -135,13 +166,47 @@ def main():
         else:
             logging.info(f'Low-priority e-mail is NOT sent')
             print(f'Low-priority e-mail за {today} не отправлен - отчеты пусты')
-    logging.info('Process finished successfully' + '-' * 100)
-    print('Нажмите что-то для завершения работы скрипта')
-    input()
+    update_log_files()
+    logging.info('Process finished successfully' + '-' * 50)
+    input('Нажмите что-то для завершения работы скрипта')
 
+
+today = date.today()
+
+if today.weekday() == 0:
+    report_web_file_url = settings.report_web_file_weekends_url
+    report_app_file_url = settings.report_app_file_weekends_url
+elif today.weekday() in (5, 6):
+    input('Сегодня выходной, по выходным мы отчеты не отправляем')
+
+
+    def main():
+        pass
+else:
+    report_web_file_url = settings.report_web_file_weekdays_url
+    report_app_file_url = settings.report_app_file_weekdays_url
+
+today = today.strftime("%d.%m.%Y")
+
+email_subject = f'{settings.email_subject}{today}'
+
+log_path = settings.file_path
+file_path = f'{settings.file_path}\\Reports\\'
+
+message_high_text = settings.message_high_text
+message_low_text = settings.message_low_text
+
+logging.basicConfig(filename=os.path.join(log_path, 'process_log.txt'), level=logging.INFO,
+                    format='%(asctime)s - %(message)s')
+
+excel_path = os.path.join(log_path, 'excel_log.xlsx')
+txt_path = os.path.join(log_path, 'txt_log.txt')
+
+high_priority_count = 0
+low_priority_count = 0
+
+excel_d = {'dt': today, 'Solta_web_high': 0, 'Solta_inapp_high': 0, 'Other_web_high': 0, 'Other_inapp_high': 0,
+                        'Solta_web_low': 0, 'Solta_inapp_low': 0, 'Other_web_low': 0, 'Other_inapp_low': 0}
 
 if __name__ == '__main__':
-    if os.path.exists(f'{file_path}/{today}'):
-        print('Отчет уже сформирован и должен был быть отправлен. Если этого не произошло, повторите отправку вручную')
-    else:
-        main()
+    main()
