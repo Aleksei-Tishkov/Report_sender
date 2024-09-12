@@ -12,10 +12,19 @@ import pandas as pd
 from io import StringIO
 import logging
 
+import telegram
+from telegram import Bot
+import asyncio
+
 import settings
 
 
-def update_log_files():
+def format_number(number):
+    number = f"{number:,}".replace(",", " ")
+    return number
+
+
+async def update_log_files():
     df = pd.read_excel(excel_path)
 
     new_row = pd.DataFrame(excel_d, index=[0])
@@ -23,17 +32,32 @@ def update_log_files():
 
     df.to_excel(excel_path, index=False)
     logging.info(f"Updated excel_log.xlsx with new row for {today}")
+
+    for k in excel_d.keys():
+        if k == 'dt':
+            continue
+        excel_d[k] = format_number(excel_d[k])
+
+    msg = f"{today}\n\nHIGH PRIORITY\n\n" \
+          f"Solta WEB: {excel_d['Solta_web_high_domains']} domains, " \
+          f"{excel_d['Solta_web_high_reqs']} requests\n" \
+          f"Solta INAPP: {excel_d['Solta_inapp_high_domains']} domains, " \
+          f"{excel_d['Solta_inapp_high_reqs']} requests\n\n" \
+          f"Other WEB: {excel_d['Other_web_high_domains']} domains, " \
+          f"{excel_d['Other_web_high_reqs']} requests\n" \
+          f"Other INAPP: {excel_d['Other_inapp_high_domains']} domains, " \
+          f"{excel_d['Other_inapp_high_reqs']} requests\n\nLOW PRIORITY\n\n" \
+          f"Solta WEB: {excel_d['Solta_web_low_domains']} domains, " \
+          f"{excel_d['Solta_web_low_reqs']} requests\n" \
+          f"Solta INAPP: {excel_d['Solta_inapp_low_domains']} domains, " \
+          f"{excel_d['Solta_inapp_low_reqs']} requests\n\n" \
+          f"Other WEB: {excel_d['Other_web_low_domains']} domains, " \
+          f"{excel_d['Other_web_low_reqs']} requests\n" \
+          f"Other INAPP: {excel_d['Other_inapp_low_domains']} domains, " \
+          f"{excel_d['Other_inapp_low_reqs']} requests"
     with open(txt_path, 'a') as file:
-        file.write(f"{today}\n"
-                   f"-----------------------\n"
-                   f"Solta web высокий приоритет: {excel_d['Solta_web_high']} строк\n"
-                   f"Solta inapp высокий приоритет: {excel_d['Solta_inapp_high']} строк\n"
-                   f"Other web высокий приоритет: {excel_d['Other_web_high']} строк\n"
-                   f"Other inapp высокий приоритет: {excel_d['Other_inapp_high']} строк\n"
-                   f"Solta web пониженный приоритет: {excel_d['Solta_web_low']} строк\n"
-                   f"Solta inapp пониженный приоритет: {excel_d['Solta_inapp_low']} строк\n"
-                   f"Other web пониженный приоритет: {excel_d['Other_web_low']} строк\n"
-                   f"Other inapp пониженный приоритет: {excel_d['Other_inapp_low']} строк\n")
+        file.write(msg + '\n\n\n')
+    await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
 
 
 def process_df(df: pandas.DataFrame):
@@ -43,8 +67,8 @@ def process_df(df: pandas.DataFrame):
     }).reset_index()
 
     second_group = first_group.groupby(['adomain']).agg({
-        'dcid': lambda x: '\n'.join(sorted(set(map(str, x)))),  # Преобразование dcid в строку
-        'dcrid': lambda x: '\n'.join(sorted(set('\n'.join(x).split('\n')))),  # Обработка dcrid
+        'dcid': lambda x: '\n'.join(sorted(set(map(str, x)))),
+        'dcrid': lambda x: '\n'.join(sorted(set('\n'.join(x).split('\n')))),
         'count': 'sum'
     }).reset_index()
 
@@ -66,12 +90,13 @@ def check_and_attach(message, d):
             logging.info(f'{filename} formed')
         else:
             logging.info(f'{filename} is empty')
-            print(f'C файлом {filename} что-то не так, проверьте')
+            print(f'{filename} пуст')
 
 
-def process_and_attach(message_high, message_low, path, tp):
+def process_csv(message_high, message_low, path, tp):
     global high_priority_count, low_priority_count
     flag_high, flag_low = False, False
+
     for _ in range(5):
         response = requests.get(path)
         if response.status_code == 200:
@@ -84,34 +109,45 @@ def process_and_attach(message_high, message_low, path, tp):
 
     df = pd.read_csv(StringIO(response.text))
 
-    df_solta = process_df(df[df['dsp'] == 'solta'].iloc[:, 1:])
-    df_other = process_df(df[df['dsp'] == 'other'].iloc[:, 1:])
+    df.to_csv(f'{file_path}//_Reports_raw//{today}//raw_{tp}_report_{today}.csv', index=False)
+
+    df_solta = df[df['dsp'] == 'solta'].iloc[:, 1:]
+
+    df_other = df[df['dsp'] == 'other'].iloc[:, 1:]
 
     df_other_high = process_df(df_other[df_other['count'] >= 100])
     df_other_low = process_df(df_other[df_other['count'] < 100])
 
-    high_priority_rows = len(df_other_high)
-    excel_d[f'Other_{tp}_high'] = high_priority_rows
-    high_priority_count += high_priority_rows
-    logging.info(f"Other {tp} high-priority report contains {high_priority_rows} rows")
+    rows = len(df_other_high)
+    reqs = sum(df_other_high['count'])
+    excel_d[f'Other_{tp}_high_domains'] = rows
+    excel_d[f'Other_{tp}_high_reqs'] = reqs
+    high_priority_count += rows
+    logging.info(f"Other DSPs {tp} high-priority report contains {rows} rows, {reqs} requests")
 
-    low_priority_rows = len(df_other_low)
-    excel_d[f'Other_{tp}_low'] = low_priority_rows
-    low_priority_count += low_priority_rows
-    logging.info(f"Other DSPs {tp} low-priority report contains {low_priority_rows} rows")  # TODO validation
+    rows = len(df_other_low)
+    reqs = sum(df_other_low['count'])
+    excel_d[f'Other_{tp}_low_domains'] = rows
+    excel_d[f'Other_{tp}_low_reqs'] = reqs
+    low_priority_count += rows
+    logging.info(f"Other DSPs {tp} low-priority report contains {rows} rows, {reqs} requests")
 
-    df_solta_high = df_solta[df_solta['count'] >= 25]
-    df_solta_low = df_solta[df_solta['count'] < 25]
+    df_solta_high = process_df(df_solta[df_solta['count'] >= 25])
+    df_solta_low = process_df(df_solta[df_solta['count'] < 25])
 
-    high_priority_rows = len(df_solta_high)
-    excel_d[f'Solta_{tp}_high'] = high_priority_rows
-    high_priority_count += high_priority_rows
-    logging.info(f"Solta {tp} high-priority report contains {high_priority_rows} rows")
+    rows = len(df_solta_high)
+    reqs = sum(df_solta_high['count'])
+    excel_d[f'Solta_{tp}_high_domains'] = rows
+    excel_d[f'Solta_{tp}_high_reqs'] = reqs
+    high_priority_count += rows
+    logging.info(f"Solta {tp} high-priority report contains {rows} rows, {reqs} requests")
 
-    low_priority_rows = len(df_solta_low)
-    excel_d[f'Solta_{tp}_low'] = low_priority_rows
-    low_priority_count += low_priority_rows
-    logging.info(f"Solta DSPs {tp} low-priority report contains {low_priority_rows} rows")
+    rows = len(df_solta_low)
+    reqs = sum(df_solta_low['count'])
+    excel_d[f'Solta_{tp}_low_domains'] = rows
+    excel_d[f'Solta_{tp}_low_reqs'] = reqs
+    low_priority_count += rows
+    logging.info(f"Solta {tp} low-priority report contains {rows} rows, {reqs} requests")
 
     check_and_attach(message_high, {f'solta_{tp}_high': df_solta_high, f'other_{tp}_high': df_other_high})
     check_and_attach(message_low, {f'solta_{tp}_low': df_solta_low, f'other_{tp}_low': df_other_low})
@@ -129,6 +165,7 @@ def main():
         input('Отчет уже сформирован и должен был быть отправлен. Если этого не произошло, повторите отправку вручную')
         return
     os.mkdir(f'{file_path}\\{today}')
+    os.mkdir(f'{file_path}_Reports_raw\\{today}')
 
     message_high = MIMEMultipart()
     message_high['From'] = settings.sender_email
@@ -143,8 +180,8 @@ def main():
     message_high.attach(MIMEText(message_high_text, 'html'))
     message_low.attach(MIMEText(message_low_text, 'html'))
 
-    web_high_flag, web_low_flag = process_and_attach(message_high, message_low, report_web_file_url, 'web')
-    app_high_flag, app_low_flag = process_and_attach(message_high, message_low, report_app_file_url, 'inapp')
+    web_high_flag, web_low_flag = process_csv(message_high, message_low, report_web_file_url, 'web')
+    app_high_flag, app_low_flag = process_csv(message_high, message_low, report_app_file_url, 'inapp')
 
     high_attachment_flag = web_high_flag or app_high_flag
     low_attachment_flag = web_low_flag or app_low_flag
@@ -166,7 +203,7 @@ def main():
         else:
             logging.info(f'Low-priority e-mail is NOT sent')
             print(f'Low-priority e-mail за {today} не отправлен - отчеты пусты')
-    update_log_files()
+    asyncio.run(update_log_files())
     logging.info('Process finished successfully' + '-' * 50)
     input('Нажмите что-то для завершения работы скрипта')
 
@@ -201,12 +238,21 @@ logging.basicConfig(filename=os.path.join(log_path, 'process_log.txt'), level=lo
 
 excel_path = os.path.join(log_path, 'excel_log.xlsx')
 txt_path = os.path.join(log_path, 'txt_log.txt')
+bot = Bot(token=settings.bot_token)
 
 high_priority_count = 0
 low_priority_count = 0
 
-excel_d = {'dt': today, 'Solta_web_high': 0, 'Solta_inapp_high': 0, 'Other_web_high': 0, 'Other_inapp_high': 0,
-                        'Solta_web_low': 0, 'Solta_inapp_low': 0, 'Other_web_low': 0, 'Other_inapp_low': 0}
+excel_d = {
+    'dt': today, 'Solta_web_high_domains': 0, 'Solta_inapp_high_domains': 0,
+    'Other_web_high_domains': 0, 'Other_inapp_high_domains': 0,
+    'Solta_web_low_domains': 0, 'Solta_inapp_low_domains': 0,
+    'Other_web_low_domains': 0, 'Other_inapp_low_domains': 0,
+    'Solta_web_high_reqs': 0, 'Solta_inapp_high_reqs': 0,
+    'Other_web_high_reqs': 0, 'Other_inapp_high_reqs': 0,
+    'Solta_web_low_reqs': 0, 'Solta_inapp_low_reqs': 0,
+    'Other_web_low_reqs': 0, 'Other_inapp_low_reqs': 0
+}
 
 if __name__ == '__main__':
     main()

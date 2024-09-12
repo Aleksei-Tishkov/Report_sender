@@ -22,3 +22,6 @@ file_path = os.getenv('FILE_PATH')
 
 message_high_text = os.getenv('MESSAGE_HIGH_TEXT')
 message_low_text = os.getenv('MESSAGE_LOW_TEXT')
+
+bot_token = os.getenv('BOT_TOKEN')
+tg_recipient_id = os.getenv('TELEGRAM_RECIPIENT_ID')
