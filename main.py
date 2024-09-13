@@ -62,7 +62,7 @@ async def update_log_files():
 
 def process_df(df: pandas.DataFrame):
     first_group = df.groupby(['adomain', 'dcid']).agg({
-        'dcrid': lambda x: '\n'.join(x),
+        'dcrid': lambda x: '\n'.join(map(str, x)),
         'count': 'sum'
     }).reset_index()
 
