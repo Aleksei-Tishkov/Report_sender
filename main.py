@@ -15,6 +15,8 @@ import logging
 from telegram import Bot
 import asyncio
 
+from file_postprocessor import process_files
+
 import settings
 
 
@@ -56,7 +58,7 @@ async def update_log_files():
           f"{excel_d['Other_inapp_low_reqs']} requests"
     with open(txt_path, 'a') as file:
         file.write(msg + '\n\n\n')
-    await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
+    #await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
 
 
 def process_df(df: pandas.DataFrame):
@@ -165,6 +167,7 @@ def main():
         return
     os.mkdir(f'{file_path}\\{today}')
     os.mkdir(f'{file_path}_Reports_raw\\{today}')
+    os.mkdir(f'{file_path}!Date_reports\\{today_str}')
 
     message_high = MIMEMultipart()
     message_high['From'] = settings.sender_email
@@ -189,14 +192,14 @@ def main():
         server.starttls()
         server.login(settings.sender_email, settings.sender_password)
         if high_attachment_flag:
-            server.sendmail(settings.sender_email, settings.receiver_email, message_high.as_string())
+            #server.sendmail(settings.sender_email, settings.receiver_email, message_high.as_string())
             logging.info(f'High-priority e-mail sent with {high_priority_count} rows in total')
             print(f'High-priority e-mail за {today} отправлен, в нем {high_priority_count} строк в сумме.')
         else:
             logging.info(f'High-priority e-mail is NOT sent')
             print(f'High-priority e-mail за {today} не отправлен - отчеты пусты')
         if low_attachment_flag:
-            server.sendmail(settings.sender_email, settings.receiver_email, message_low.as_string())
+            #server.sendmail(settings.sender_email, settings.receiver_email, message_low.as_string())
             logging.info(f'Low-priority e-mail sent  with {low_priority_count} rows in total')
             print(f'Low-priority e-mail за {today} отправлен, в нем {low_priority_count} строк в сумме')
         else:
@@ -204,7 +207,6 @@ def main():
             print(f'Low-priority e-mail за {today} не отправлен - отчеты пусты')
     asyncio.run(update_log_files())
     logging.info('Process finished successfully' + '-' * 50 + '\n')
-    input('Нажмите что-то для завершения работы скрипта')
 
 
 today = date.today()
@@ -215,12 +217,13 @@ if today.weekday() == 0:
 elif today.weekday() in (5, 6):
     input('Сегодня выходной, по выходным мы отчеты не отправляем')
 
-
     def main():
         pass
 else:
     report_web_file_url = settings.report_web_file_weekdays_url
     report_app_file_url = settings.report_app_file_weekdays_url
+
+today_str = today.strftime("%Y-%m-%d")
 
 today = today.strftime("%d.%m.%Y")
 
@@ -256,6 +259,14 @@ excel_d = {
 if __name__ == '__main__':
     try:
         main()
+        while True:
+            flag = bool(int(input('Хотите запустить постобработку отчетов? 1 - да, 0 - нет')))
+            if flag:
+                process_files()
+                break
+            else:
+                break
+
     except Exception as e:
         print(e)
         logging.info(e)
