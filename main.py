@@ -12,7 +12,6 @@ import pandas as pd
 from io import StringIO
 import logging
 
-import telegram
 from telegram import Bot
 import asyncio
 
@@ -204,7 +203,7 @@ def main():
             logging.info(f'Low-priority e-mail is NOT sent')
             print(f'Low-priority e-mail за {today} не отправлен - отчеты пусты')
     asyncio.run(update_log_files())
-    logging.info('Process finished successfully' + '-' * 50)
+    logging.info('Process finished successfully' + '-' * 50 + '\n')
     input('Нажмите что-то для завершения работы скрипта')
 
 
@@ -259,3 +258,4 @@ if __name__ == '__main__':
         main()
     except Exception as e:
         print(e)
+        logging.info(e)
