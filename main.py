@@ -79,7 +79,7 @@ def process_df(df: pandas.DataFrame):
 
 def check_and_attach(message, d):
     for filename, dataframe in d.items():
-        if sum(dataframe.index) > 1:
+        if len(dataframe.index) > 0:
             attachment = MIMEBase('application', 'octet-stream')
             dataframe.to_csv(f'{file_path}//{today}//{filename}_{today}.csv', index=False)
             csv_data = dataframe.to_csv(index=False)
