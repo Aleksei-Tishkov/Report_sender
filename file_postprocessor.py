@@ -21,18 +21,8 @@ def write_to_excel(data, output_file):
     wb = Workbook()
     ws = wb.active
     ws.title = "DCRID Data"
-    current_chunk = "''" + data[0] + "'"
-    print(len(data))
-    for dcrid in data[1:]:
-        if len(current_chunk) + len(dcrid) + 2 <= MAX_EXCEL_STR_LEN:
-            current_chunk += ", " + "'" + dcrid + "'"
-        else:
-            ws.append([today, current_chunk])
-            current_chunk = "''" + dcrid + "'"
-
-    if current_chunk:
-        ws.append([today, current_chunk])
-
+    for dcrid in data:
+        ws.append([today, dcrid])
     wb.save(output_file)
 
 

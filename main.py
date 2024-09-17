@@ -18,6 +18,7 @@ import asyncio
 from file_postprocessor import process_files
 
 import settings
+from statistics import save_creatives
 
 
 def format_number(number):
@@ -58,7 +59,7 @@ async def update_log_files():
           f"{excel_d['Other_inapp_low_reqs']} requests"
     with open(txt_path, 'a') as file:
         file.write(msg + '\n\n\n')
-    #await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
+    await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
 
 
 def process_df(df: pandas.DataFrame):
@@ -69,7 +70,7 @@ def process_df(df: pandas.DataFrame):
 
     second_group = first_group.groupby(['adomain']).agg({
         'dcid': lambda x: '\n'.join(sorted(set(map(str, x)))),
-        'dcrid': lambda x: '\n'.join(sorted(set('\n'.join(x).split('\n')))),
+        'dcrid': lambda x: '\n'.join(sorted(set('\n'.join(map(str, x)).split('\n')))),
         'count': 'sum'
     }).reset_index()
 
@@ -109,6 +110,9 @@ def process_csv(message_high, message_low, path, tp):
         raise BaseException('Ошибка доступа к серверу с отчетами')
 
     df = pd.read_csv(StringIO(response.text))
+
+    today_creatives.update(df['dcrid'].unique())
+    print(today_creatives)
 
     df.to_csv(f'{file_path}//_Reports_raw//{today}//raw_{tp}_report_{today}.csv', index=False)
 
@@ -192,19 +196,20 @@ def main():
         server.starttls()
         server.login(settings.sender_email, settings.sender_password)
         if high_attachment_flag:
-            #server.sendmail(settings.sender_email, settings.receiver_email, message_high.as_string())
+            server.sendmail(settings.sender_email, settings.receiver_email, message_high.as_string())
             logging.info(f'High-priority e-mail sent with {high_priority_count} rows in total')
             print(f'High-priority e-mail за {today} отправлен, в нем {high_priority_count} строк в сумме.')
         else:
             logging.info(f'High-priority e-mail is NOT sent')
             print(f'High-priority e-mail за {today} не отправлен - отчеты пусты')
         if low_attachment_flag:
-            #server.sendmail(settings.sender_email, settings.receiver_email, message_low.as_string())
+            server.sendmail(settings.sender_email, settings.receiver_email, message_low.as_string())
             logging.info(f'Low-priority e-mail sent  with {low_priority_count} rows in total')
             print(f'Low-priority e-mail за {today} отправлен, в нем {low_priority_count} строк в сумме')
         else:
             logging.info(f'Low-priority e-mail is NOT sent')
             print(f'Low-priority e-mail за {today} не отправлен - отчеты пусты')
+    save_creatives(today, today_creatives)
     asyncio.run(update_log_files())
     logging.info('Process finished successfully' + '-' * 50 + '\n')
 
@@ -256,17 +261,22 @@ excel_d = {
     'Other_web_low_reqs': 0, 'Other_inapp_low_reqs': 0
 }
 
+today_creatives = set()
+
+
 if __name__ == '__main__':
     try:
         main()
         while True:
-            flag = bool(int(input('Хотите запустить постобработку отчетов? 1 - да, 0 - нет')))
-            if flag:
-                process_files()
-                break
-            else:
-                break
-
+            try:
+                flag = bool(int(input('Хотите запустить постобработку отчетов? 1 - да, 0 - нет')))
+                if flag:
+                    process_files()
+                    break
+                else:
+                    break
+            except:
+                continue
     except Exception as e:
-        print(e)
+        input(f'Process terminated with Exception: {e}')
         logging.info(e)
