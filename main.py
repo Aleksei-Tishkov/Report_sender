@@ -18,7 +18,7 @@ import asyncio
 from file_postprocessor import process_files
 
 import settings
-from statistics import save_creatives
+from statistics import save_creatives, daily_statistics
 
 
 def format_number(number):
@@ -57,9 +57,10 @@ async def update_log_files():
           f"{excel_d['Other_web_low_reqs']} requests\n" \
           f"Other INAPP: {excel_d['Other_inapp_low_domains']} domains, " \
           f"{excel_d['Other_inapp_low_reqs']} requests"
+    msg += daily_statistics()
     with open(txt_path, 'a') as file:
         file.write(msg + '\n\n\n')
-    await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
+    #await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
 
 
 def process_df(df: pandas.DataFrame):
@@ -102,7 +103,7 @@ def process_csv(message_high, message_low, path, tp):
     for _ in range(5):
         response = requests.get(path)
         if response.status_code == 200:
-            logging.info(f'{response.status_code}: successfully got csv on {path}')
+            logging.info(f'{response.status_code}: successfully got {tp} csv')
             break
         else:
             logging.info(f'{response.status_code}: unavailable {path}')
@@ -112,7 +113,6 @@ def process_csv(message_high, message_low, path, tp):
     df = pd.read_csv(StringIO(response.text))
 
     today_creatives.update(df['dcrid'].unique())
-    print(today_creatives)
 
     df.to_csv(f'{file_path}//_Reports_raw//{today}//raw_{tp}_report_{today}.csv', index=False)
 
@@ -196,14 +196,14 @@ def main():
         server.starttls()
         server.login(settings.sender_email, settings.sender_password)
         if high_attachment_flag:
-            server.sendmail(settings.sender_email, settings.receiver_email, message_high.as_string())
+            #server.sendmail(settings.sender_email, settings.receiver_email, message_high.as_string())
             logging.info(f'High-priority e-mail sent with {high_priority_count} rows in total')
             print(f'High-priority e-mail за {today} отправлен, в нем {high_priority_count} строк в сумме.')
         else:
             logging.info(f'High-priority e-mail is NOT sent')
             print(f'High-priority e-mail за {today} не отправлен - отчеты пусты')
         if low_attachment_flag:
-            server.sendmail(settings.sender_email, settings.receiver_email, message_low.as_string())
+            #server.sendmail(settings.sender_email, settings.receiver_email, message_low.as_string())
             logging.info(f'Low-priority e-mail sent  with {low_priority_count} rows in total')
             print(f'Low-priority e-mail за {today} отправлен, в нем {low_priority_count} строк в сумме')
         else:
@@ -242,6 +242,8 @@ message_low_text = settings.message_low_text
 
 logging.basicConfig(filename=os.path.join(log_path, 'process_log.txt'), level=logging.INFO,
                     format='%(asctime)s - %(message)s')
+
+logging.getLogger('telegram').setLevel(logging.WARNING)
 
 excel_path = os.path.join(log_path, 'excel_log.xlsx')
 txt_path = os.path.join(log_path, 'txt_log.txt')
