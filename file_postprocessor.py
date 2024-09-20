@@ -1,7 +1,8 @@
+import json
 import os
 import pandas as pd
 from openpyxl import Workbook
-from datetime import date
+from datetime import date, timedelta
 
 from settings import file_path
 
@@ -60,3 +61,29 @@ def process_files():
 
     input('Нажмите что-то для завершения работы скрипта')
     return
+
+
+def get_crids_from_json(today, json_path):
+    with open(json_path, 'r') as f:
+        crid_data = json.load(f)
+
+    # Получаем даты за предыдущую неделю (учитывая рабочие дни)
+    previous_week_dates = []
+    current_date = today - timedelta(days=1)
+
+    while len(previous_week_dates) < 5:
+        if current_date.weekday() < 5:  # Пн-Пт
+            previous_week_dates.append(current_date.strftime('%Y-%m-%d'))
+        current_date -= timedelta(days=1)
+
+    # Собираем все crid за эту неделю
+    crid_weekly_sets = []
+    for date in previous_week_dates:
+        if date in crid_data:
+            crid_weekly_sets.extend(crid_data[date])
+
+    # Находим crid-ы, которые встречаются более одного раза
+    crid_counts = pd.Series(crid_weekly_sets).value_counts()
+    duplicate_crids = set(crid_counts[crid_counts > 1].index)
+
+    return duplicate_crids

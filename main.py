@@ -15,10 +15,10 @@ import logging
 from telegram import Bot
 import asyncio
 
-from file_postprocessor import process_files
+import file_postprocessor
 
 import settings
-from statistics import save_creatives, daily_statistics, weekly_statistics
+import statistics
 
 
 def format_number(number):
@@ -57,12 +57,12 @@ async def update_log_files():
           f"{excel_d['Other_web_low_reqs']} requests\n" \
           f"Other INAPP: {excel_d['Other_inapp_low_domains']} domains, " \
           f"{excel_d['Other_inapp_low_reqs']} requests"
-    msg += daily_statistics()
+    msg += statistics.daily_statistics()
     with open(txt_path, 'a') as file:
         file.write(msg + '\n\n\n')
-    await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
+    #await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
     if date.today().weekday() == 4:
-        msg = weekly_statistics()
+        msg = statistics.weekly_statistics()
         with open(txt_path, 'a') as file:
             file.write(msg + '\n\n\n')
         # await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
@@ -121,9 +121,13 @@ def process_csv(message_high, message_low, path, tp):
 
     df.to_csv(f'{file_path}//_Reports_raw//{today}//raw_{tp}_report_{today}.csv', index=False)
 
+    duplicate_crids = file_postprocessor.get_crids_from_json(date.today(), statistics.json_path)
+
     df_solta = df[df['dsp'] == 'solta'].iloc[:, 1:]
+    df_solta = df_solta[~df_solta['dcrid'].isin(duplicate_crids)]
 
     df_other = df[df['dsp'] == 'other'].iloc[:, 1:]
+    df_other = df_other[~df_other['dcrid'].isin(duplicate_crids)]
 
     df_other_high = process_df(df_other[df_other['count'] >= 100])
     df_other_low = process_df(df_other[df_other['count'] < 100])
@@ -201,20 +205,20 @@ def main():
         server.starttls()
         server.login(settings.sender_email, settings.sender_password)
         if high_attachment_flag:
-            server.sendmail(settings.sender_email, settings.receiver_email, message_high.as_string())
+            #server.sendmail(settings.sender_email, settings.receiver_email, message_high.as_string())
             logging.info(f'High-priority e-mail sent with {high_priority_count} rows in total')
             print(f'High-priority e-mail за {today} отправлен, в нем {high_priority_count} строк в сумме.')
         else:
             logging.info(f'High-priority e-mail is NOT sent')
             print(f'High-priority e-mail за {today} не отправлен - отчеты пусты')
         if low_attachment_flag:
-            server.sendmail(settings.sender_email, settings.receiver_email, message_low.as_string())
+            #server.sendmail(settings.sender_email, settings.receiver_email, message_low.as_string())
             logging.info(f'Low-priority e-mail sent  with {low_priority_count} rows in total')
             print(f'Low-priority e-mail за {today} отправлен, в нем {low_priority_count} строк в сумме')
         else:
             logging.info(f'Low-priority e-mail is NOT sent')
             print(f'Low-priority e-mail за {today} не отправлен - отчеты пусты')
-    save_creatives(today, today_creatives)
+    statistics.save_creatives(today, today_creatives)
     asyncio.run(update_log_files())
     logging.info('Process finished successfully' + '-' * 50 + '\n')
 
@@ -249,6 +253,7 @@ logging.basicConfig(filename=os.path.join(log_path, 'process_log.txt'), level=lo
                     format='%(asctime)s - %(message)s')
 
 logging.getLogger('telegram').setLevel(logging.WARNING)
+logging.getLogger('requests').setLevel(logging.WARNING)
 
 excel_path = os.path.join(log_path, 'excel_log.xlsx')
 txt_path = os.path.join(log_path, 'txt_log.txt')
@@ -278,7 +283,7 @@ if __name__ == '__main__':
             try:
                 flag = bool(int(input('Хотите запустить постобработку отчетов? 1 - да, 0 - нет')))
                 if flag:
-                    process_files()
+                    file_postprocessor.process_files()
                     break
                 else:
                     break
