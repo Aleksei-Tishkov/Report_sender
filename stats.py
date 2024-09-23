@@ -4,32 +4,25 @@ import logging
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta
-
 import pandas as pd
 
-from settings import file_path
 
-
-json_path = os.path.join(file_path, 'creative_dictionary.json')
-stuck_creatives_weekly_path = os.path.join(file_path, 'stuck_creatives_weekly.csv')
-
-
-def save_creatives(date, creatives):
+def save_creatives(creative_dictionary_path, date, creatives):
     try:
-        with open(json_path, 'r') as file:
+        with open(creative_dictionary_path, 'r') as file:
             data = json.load(file)
     except FileNotFoundError:
         data = {}
 
     data[date] = list(creatives)
 
-    with open(json_path, 'w') as file:
+    with open(creative_dictionary_path, 'w') as file:
         json.dump(data, file)
 
 
-def daily_statistics():
+def daily_statistics(creative_dictionary_path):
     try:
-        with open(json_path, 'r') as file:
+        with open(creative_dictionary_path, 'r') as file:
             data = json.load(file)
     except FileNotFoundError:
         logging.error("No previous data found.")
@@ -51,15 +44,15 @@ def daily_statistics():
     data[f'{today}_diff_creatives'] = list(diff_creatives)
     data[f'{today}_repeated_creatives'] = list(repeated_creatives)
 
-    with open(json_path, 'w') as file:
+    with open(creative_dictionary_path, 'w') as file:
         json.dump(data, file)
 
     return f'\n\nComparing {today} to {yesterday}:\n' \
            f'{len(diff_creatives)} different crids, {len(repeated_creatives)} repeated crids'
 
 
-def weekly_statistics():
-    with open(json_path, 'r') as file:
+def weekly_statistics(creative_dictionary):
+    with open(creative_dictionary_path, 'r') as file:
         data = json.load(file)
 
     today = datetime.today().strftime('%Y-%m-%d')

@@ -18,7 +18,7 @@ import asyncio
 import file_postprocessor
 
 import settings
-import statistics
+import stats
 
 
 def format_number(number):
@@ -57,12 +57,12 @@ async def update_log_files():
           f"{excel_d['Other_web_low_reqs']} requests\n" \
           f"Other INAPP: {excel_d['Other_inapp_low_domains']} domains, " \
           f"{excel_d['Other_inapp_low_reqs']} requests"
-    msg += statistics.daily_statistics()
+    msg += stats.daily_statistics(creative_dictionary_path)
     with open(txt_path, 'a') as file:
         file.write(msg + '\n\n\n')
-    #await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
+    await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
     if date.today().weekday() == 4:
-        msg = statistics.weekly_statistics()
+        msg = stats.weekly_statistics(creative_dictionary_path)
         with open(txt_path, 'a') as file:
             file.write(msg + '\n\n\n')
         # await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
@@ -121,13 +121,14 @@ def process_csv(message_high, message_low, path, tp):
 
     df.to_csv(f'{file_path}//_Reports_raw//{today}//raw_{tp}_report_{today}.csv', index=False)
 
-    duplicate_crids = file_postprocessor.get_crids_from_json(date.today(), statistics.json_path)
+    # duplicate_crids, previous_day_crids = file_postprocessor.get_stuck_crids_from_json(date.today(), creative_dictionary_path)
+    # crids_to_exclude = duplicate_crids.union(previous_day_crids)
 
     df_solta = df[df['dsp'] == 'solta'].iloc[:, 1:]
-    df_solta = df_solta[~df_solta['dcrid'].isin(duplicate_crids)]
+    # df_solta = df_solta[~df_solta['dcrid'].isin(crids_to_exclude)]
 
     df_other = df[df['dsp'] == 'other'].iloc[:, 1:]
-    df_other = df_other[~df_other['dcrid'].isin(duplicate_crids)]
+    # df_other = df_other[~df_other['dcrid'].isin(crids_to_exclude)]
 
     df_other_high = process_df(df_other[df_other['count'] >= 100])
     df_other_low = process_df(df_other[df_other['count'] < 100])
@@ -205,20 +206,20 @@ def main():
         server.starttls()
         server.login(settings.sender_email, settings.sender_password)
         if high_attachment_flag:
-            #server.sendmail(settings.sender_email, settings.receiver_email, message_high.as_string())
+            server.sendmail(settings.sender_email, settings.receiver_email, message_high.as_string())
             logging.info(f'High-priority e-mail sent with {high_priority_count} rows in total')
             print(f'High-priority e-mail за {today} отправлен, в нем {high_priority_count} строк в сумме.')
         else:
             logging.info(f'High-priority e-mail is NOT sent')
             print(f'High-priority e-mail за {today} не отправлен - отчеты пусты')
         if low_attachment_flag:
-            #server.sendmail(settings.sender_email, settings.receiver_email, message_low.as_string())
+            server.sendmail(settings.sender_email, settings.receiver_email, message_low.as_string())
             logging.info(f'Low-priority e-mail sent  with {low_priority_count} rows in total')
             print(f'Low-priority e-mail за {today} отправлен, в нем {low_priority_count} строк в сумме')
         else:
             logging.info(f'Low-priority e-mail is NOT sent')
             print(f'Low-priority e-mail за {today} не отправлен - отчеты пусты')
-    statistics.save_creatives(today, today_creatives)
+    stats.save_creatives(creative_dictionary_path, today, today_creatives)
     asyncio.run(update_log_files())
     logging.info('Process finished successfully' + '-' * 50 + '\n')
 
@@ -244,10 +245,6 @@ today = today.strftime("%d.%m.%Y")
 email_subject = f'{settings.email_subject}{today}'
 
 log_path = settings.file_path
-file_path = f'{settings.file_path}\\Reports\\'
-
-message_high_text = settings.message_high_text
-message_low_text = settings.message_low_text
 
 logging.basicConfig(filename=os.path.join(log_path, 'process_log.txt'), level=logging.INFO,
                     format='%(asctime)s - %(message)s')
@@ -255,8 +252,16 @@ logging.basicConfig(filename=os.path.join(log_path, 'process_log.txt'), level=lo
 logging.getLogger('telegram').setLevel(logging.WARNING)
 logging.getLogger('requests').setLevel(logging.WARNING)
 
+file_path = f'{settings.file_path}\\Reports\\'
+
+creative_dictionary_path = os.path.join(settings.file_path, 'creative_dictionary.json')
+stuck_creatives_weekly_path = os.path.join(settings.file_path, 'stuck_creatives_weekly.csv')
 excel_path = os.path.join(log_path, 'excel_log.xlsx')
 txt_path = os.path.join(log_path, 'txt_log.txt')
+
+message_high_text = settings.message_high_text
+message_low_text = settings.message_low_text
+
 bot = Bot(token=settings.bot_token)
 
 high_priority_count = 0
@@ -281,7 +286,7 @@ if __name__ == '__main__':
         main()
         while True:
             try:
-                flag = bool(int(input('Хотите запустить постобработку отчетов? 1 - да, 0 - нет')))
+                flag = bool(int(input('Хотите запустить постобработку отчетов? 1 - да, 0 - нет\n')))
                 if flag:
                     file_postprocessor.process_files()
                     break
@@ -291,4 +296,4 @@ if __name__ == '__main__':
                 continue
     except Exception as e:
         input(f'Process terminated with Exception: {e}')
-        logging.info(e)
+        logging.exception('')

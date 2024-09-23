@@ -4,14 +4,14 @@ import pandas as pd
 from openpyxl import Workbook
 from datetime import date, timedelta
 
-from settings import file_path
+import settings
 
 
 MAX_EXCEL_STR_LEN = 32767
 
 today = date.today().strftime("%Y-%m-%d")
 
-path = os.path.join(file_path, f'Reports/!Date_reports/{today}')
+path = os.path.join(settings.file_path, f'Reports/!Date_reports/{today}')
 
 
 def get_csv_files(path):
@@ -63,13 +63,21 @@ def process_files():
     return
 
 
-def get_crids_from_json(today, json_path):
+def get_previous_working_day(today):
+    previous_day = today - timedelta(days=1)
+    while previous_day.weekday() >= 5:  # Пропускаем выходные (сб, вс)
+        previous_day -= timedelta(days=1)
+    return previous_day.strftime('%Y-%m-%d')
+
+
+def get_stuck_crids_from_json(today, json_path):
     with open(json_path, 'r') as f:
         crid_data = json.load(f)
 
     # Получаем даты за предыдущую неделю (учитывая рабочие дни)
     previous_week_dates = []
     current_date = today - timedelta(days=1)
+    previous_working_day = get_previous_working_day(today)
 
     while len(previous_week_dates) < 5:
         if current_date.weekday() < 5:  # Пн-Пт
@@ -82,8 +90,12 @@ def get_crids_from_json(today, json_path):
         if date in crid_data:
             crid_weekly_sets.extend(crid_data[date])
 
+    previous_day_crids = set()
+    if previous_working_day in crid_data:
+        previous_day_crids = set(crid_data[previous_working_day])
+
     # Находим crid-ы, которые встречаются более одного раза
     crid_counts = pd.Series(crid_weekly_sets).value_counts()
     duplicate_crids = set(crid_counts[crid_counts > 1].index)
 
-    return duplicate_crids
+    return duplicate_crids, previous_day_crids

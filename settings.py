@@ -2,7 +2,8 @@ import os
 import dotenv
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
-dotenv_path = os.path.join(script_dir, '.env')
+dotenv_path = os.path.join(script_dir, '.env')     # Prod
+# dotenv_path = os.path.join(script_dir, '_.env')     # Test
 dotenv.load_dotenv(dotenv_path)
 
 receiver_email = os.getenv('RECEIVER_EMAIL')
