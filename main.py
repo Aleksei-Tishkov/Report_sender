@@ -9,7 +9,7 @@ from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
 import pandas as pd
-from io import StringIO
+from io import BytesIO
 import logging
 
 from telegram import Bot
@@ -175,7 +175,7 @@ def check_and_attach(message, d):
             print(f'{filename} пуст')
 
 
-def process_csv(message_high, message_low, path, tp):
+async def process_csv(message_high, message_low, path, tp):
     global high_priority_count, low_priority_count
     flag_high, flag_low = False, False
 
@@ -189,7 +189,7 @@ def process_csv(message_high, message_low, path, tp):
     else:
         raise BaseException('Ошибка доступа к серверу с отчетами')
 
-    df = pd.read_csv(StringIO(response.text))
+    df = pd.read_csv(BytesIO(response.content))
 
     today_creatives.update(df['dcrid'].unique())
 
@@ -257,19 +257,24 @@ def process_csv(message_high, message_low, path, tp):
     return flag_high, flag_low
 
 
-def process_unmoderated():
+async def process_unmoderated():
     df = pd.read_csv(settings.report_unmoderated)
-    df.to_csv(f'{file_path}{today}unmoderated.csv', index=False)
+    df.to_csv(f'{file_path}{today}//unmoderated.csv', index=False)
     excel_d["unmoderated"] = len(df)
 
 
-def main():
+async def send_email(server, email, message):
+    await asyncio.sleep(0)
+    server.sendmail(settings.sender_email, email, message.as_string())
+
+
+async def main():
     if os.path.exists(f'{file_path}{today}'):
         input('Отчет уже сформирован и должен был быть отправлен. Если этого не произошло, повторите отправку вручную')
         return
-    os.mkdir(f'{file_path}\\{today}')
-    os.mkdir(f'{file_path}_Reports_raw\\{today}')
-    os.mkdir(f'{file_path}!Date_reports\\{today}')
+    os.makedirs(f'{file_path}\\{today}', exist_ok=True)
+    os.makedirs(f'{file_path}_Reports_raw\\{today}', exist_ok=True)
+    os.makedirs(f'{file_path}!Date_reports\\{today}', exist_ok=True)
 
     message_high = MIMEMultipart()
     message_high['From'] = settings.sender_email
@@ -284,9 +289,9 @@ def main():
     message_high.attach(MIMEText(message_high_text, 'html'))
     message_low.attach(MIMEText(message_low_text, 'html'))
 
-    web_high_flag, web_low_flag = process_csv(message_high, message_low, report_web_file_url, 'web')
-    app_high_flag, app_low_flag = process_csv(message_high, message_low, report_app_file_url, 'inapp')
-    process_unmoderated()
+    web_high_flag, web_low_flag = await process_csv(message_high, message_low, report_web_file_url, 'web')
+    app_high_flag, app_low_flag = await process_csv(message_high, message_low, report_app_file_url, 'inapp')
+    await process_unmoderated()
 
     high_attachment_flag = web_high_flag or app_high_flag
     low_attachment_flag = web_low_flag or app_low_flag
@@ -295,21 +300,21 @@ def main():
         server.starttls()
         server.login(settings.sender_email, settings.sender_password)
         if high_attachment_flag:
-            server.sendmail(settings.sender_email, settings.receiver_email, message_high.as_string())
+            await send_email(server, settings.receiver_email, message_high)
             logging.info(f'High-priority e-mail sent with {high_priority_count} rows in total')
             print(f'High-priority e-mail за {today} отправлен, в нем {high_priority_count} строк в сумме.')
         else:
             logging.info(f'High-priority e-mail is NOT sent')
             print(f'High-priority e-mail за {today} не отправлен - отчеты пусты')
         if low_attachment_flag:
-            server.sendmail(settings.sender_email, settings.receiver_email, message_low.as_string())
+            await send_email(server, settings.receiver_email, message_low)
             logging.info(f'Low-priority e-mail sent  with {low_priority_count} rows in total')
             print(f'Low-priority e-mail за {today} отправлен, в нем {low_priority_count} строк в сумме')
         else:
             logging.info(f'Low-priority e-mail is NOT sent')
             print(f'Low-priority e-mail за {today} не отправлен - отчеты пусты')
     stats.save_creatives(creative_dictionary_path, today, today_creatives)
-    asyncio.run(update_log_files())
+    await update_log_files()
     logging.info('Process finished successfully' + '-' * 50 + '\n')
 
 
@@ -377,7 +382,7 @@ today_creatives = set()
 
 if __name__ == '__main__':
     try:
-        main()
+        asyncio.run(main())
         while True:
             try:
                 flag = bool(int(input('Хотите запустить постобработку отчетов? 1 - да, 0 - нет\n')))
@@ -390,4 +395,4 @@ if __name__ == '__main__':
                 continue
     except Exception as e:
         input(f'Process terminated with Exception: {e}')
-        logging.exception('')
+        logging.exception(e)
