@@ -2,8 +2,8 @@ import os
 import dotenv
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
-dotenv_path = os.path.join(script_dir, '.env')     # Prod
-# dotenv_path = os.path.join(script_dir, '_.env')     # Test
+# dotenv_path = os.path.join(script_dir, '.env')     # Prod
+dotenv_path = os.path.join(script_dir, '_.env')     # Test
 dotenv.load_dotenv(dotenv_path)
 
 receiver_email = os.getenv('RECEIVER_EMAIL')
@@ -18,6 +18,8 @@ report_web_file_weekends_url = os.getenv('REPORT_FILE_WEB_WEEKENDS')
 
 report_web_file_weekdays_url = os.getenv('REPORT_FILE_WEB_WEEKDAYS')
 report_app_file_weekdays_url = os.getenv('REPORT_FILE_INAPP_WEEKDAYS')
+
+report_unmoderated = os.getenv('REPORT_UNMODERATED')
 
 file_path = os.getenv('FILE_PATH')
 

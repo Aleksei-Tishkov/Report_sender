@@ -26,6 +26,90 @@ def format_number(number):
     return number
 
 
+def format_message(excel_d, today):
+    def pluralize(word, count):
+        return f"{word}{'' if count == 1 else 's'}"
+
+    msg = f"{today}\n\n"
+
+    high_priority = []
+    if excel_d.get('Solta_web_high_domains') != '0':
+        domains = excel_d['Solta_web_high_domains']
+        crids = excel_d['Solta_web_high_crids']
+        requests = excel_d['Solta_web_high_reqs']
+        high_priority.append(f"Solta WEB: {domains} {pluralize('adomain', domains)}, "
+                             f"{crids} {pluralize('crid', crids)}, "
+                             f"{requests} {pluralize('request', requests)}")
+    if excel_d.get('Solta_inapp_high_domains') != '0':
+        domains = excel_d['Solta_inapp_high_domains']
+        crids = excel_d['Solta_inapp_high_crids']
+        requests = excel_d['Solta_inapp_high_reqs']
+        high_priority.append(f"Solta INAPP: {domains} {pluralize('adomain', domains)}, "
+                             f"{crids} {pluralize('crid', crids)}, "
+                             f"{requests} {pluralize('request', requests)}")
+    if excel_d.get('Other_web_high_domains') != '0':
+        domains = excel_d['Other_web_high_domains']
+        crids = excel_d['Other_web_high_crids']
+        requests = excel_d['Other_web_high_reqs']
+        high_priority.append(f"Other WEB: {domains} {pluralize('adomain', domains)}, "
+                             f"{crids} {pluralize('crid', crids)}, "
+                             f"{requests} {pluralize('request', requests)}")
+    if excel_d.get('Other_inapp_high_domains') != '0':
+        domains = excel_d['Other_inapp_high_domains']
+        crids = excel_d['Other_inapp_high_crids']
+        requests = excel_d['Other_inapp_high_reqs']
+        high_priority.append(f"Other INAPP: {domains} {pluralize('adomain', domains)}, "
+                             f"{crids} {pluralize('crid', crids)}, "
+                             f"{requests} {pluralize('request', requests)}")
+
+    if high_priority:
+        msg += "HIGH PRIORITY\n\n" + "\n".join(high_priority) + "\n\n"
+    else:
+        msg += "HIGH PRIORITY: No data available\n\n"
+
+    low_priority = []
+    if excel_d.get('Solta_web_low_domains') != '0':
+        domains = excel_d['Solta_web_low_domains']
+        crids = excel_d['Solta_web_low_crids']
+        requests = excel_d['Solta_web_low_reqs']
+        low_priority.append(f"Solta WEB: {domains} {pluralize('adomain', domains)}, "
+                            f"{crids} {pluralize('crid', crids)}, "
+                            f"{requests} {pluralize('request', requests)}")
+    if excel_d.get('Solta_inapp_low_domains') != '0':
+        domains = excel_d['Solta_inapp_low_domains']
+        crids = excel_d['Solta_inapp_low_crids']
+        requests = excel_d['Solta_inapp_low_reqs']
+        low_priority.append(f"Solta INAPP: {domains} {pluralize('adomain', domains)}, "
+                            f"{crids} {pluralize('crid', crids)}, "
+                            f"{requests} {pluralize('request', requests)}")
+    if excel_d.get('Other_web_low_domains') != '0':
+        domains = excel_d['Other_web_low_domains']
+        crids = excel_d['Other_web_low_crids']
+        requests = excel_d['Other_web_low_reqs']
+        low_priority.append(f"Other WEB: {domains} {pluralize('adomain', domains)}, "
+                            f"{crids} {pluralize('crid', crids)}, "
+                            f"{requests} {pluralize('request', requests)}")
+    if excel_d.get('Other_inapp_low_domains') != '0':
+        domains = excel_d['Other_inapp_low_domains']
+        crids = excel_d['Other_inapp_low_crids']
+        requests = excel_d['Other_inapp_low_reqs']
+        low_priority.append(f"Other INAPP: {domains} {pluralize('adomain', domains)}, "
+                            f"{crids} {pluralize('crid', crids)}, "
+                            f"{requests} {pluralize('request', requests)}")
+
+    # print(low_priority, high_priority)
+    if low_priority:
+        msg += "LOW PRIORITY\n\n" + "\n".join(low_priority)
+    else:
+        msg += "LOW PRIORITY: No data available"
+
+    msg += f'\n\nUnmoderated crids: {excel_d["unmoderated"]}'
+
+    # msg += stats.daily_statistics(creative_dictionary_path) # think over - what daily stats should be here/
+
+    return msg
+
+
 async def update_log_files():
     df = pd.read_excel(excel_path)
 
@@ -40,24 +124,8 @@ async def update_log_files():
             continue
         excel_d[k] = format_number(excel_d[k])
 
-    msg = f"{today}\n\nHIGH PRIORITY\n\n" \
-          f"Solta WEB: {excel_d['Solta_web_high_domains']} domains, " \
-          f"{excel_d['Solta_web_high_reqs']} requests\n" \
-          f"Solta INAPP: {excel_d['Solta_inapp_high_domains']} domains, " \
-          f"{excel_d['Solta_inapp_high_reqs']} requests\n\n" \
-          f"Other WEB: {excel_d['Other_web_high_domains']} domains, " \
-          f"{excel_d['Other_web_high_reqs']} requests\n" \
-          f"Other INAPP: {excel_d['Other_inapp_high_domains']} domains, " \
-          f"{excel_d['Other_inapp_high_reqs']} requests\n\nLOW PRIORITY\n\n" \
-          f"Solta WEB: {excel_d['Solta_web_low_domains']} domains, " \
-          f"{excel_d['Solta_web_low_reqs']} requests\n" \
-          f"Solta INAPP: {excel_d['Solta_inapp_low_domains']} domains, " \
-          f"{excel_d['Solta_inapp_low_reqs']} requests\n\n" \
-          f"Other WEB: {excel_d['Other_web_low_domains']} domains, " \
-          f"{excel_d['Other_web_low_reqs']} requests\n" \
-          f"Other INAPP: {excel_d['Other_inapp_low_domains']} domains, " \
-          f"{excel_d['Other_inapp_low_reqs']} requests"
-    msg += stats.daily_statistics(creative_dictionary_path)
+    msg = format_message(excel_d, today)
+
     with open(txt_path, 'a') as file:
         file.write(msg + '\n\n\n')
     await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
@@ -83,6 +151,12 @@ def process_df(df: pandas.DataFrame):
     result = second_group.sort_values(by='count', ascending=False)
 
     return result
+
+
+def count_crid(df):
+    df['dcrid'] = df['dcrid'].fillna('').astype(str)
+    crid_counts = df['dcrid'].fillna('').str.split('\n').str.len()
+    return int(crid_counts.sum())
 
 
 def check_and_attach(message, d):
@@ -134,35 +208,43 @@ def process_csv(message_high, message_low, path, tp):
     df_other_low = process_df(df_other[df_other['count'] < 100])
 
     rows = len(df_other_high)
+    crids = count_crid(df_other_high)
     reqs = sum(df_other_high['count'])
     excel_d[f'Other_{tp}_high_domains'] = rows
+    excel_d[f'Other_{tp}_high_crids'] = crids
     excel_d[f'Other_{tp}_high_reqs'] = reqs
     high_priority_count += rows
-    logging.info(f"Other DSPs {tp} high-priority report contains {rows} rows, {reqs} requests")
+    logging.info(f"Other DSPs {tp} high-priority report contains {rows} rows, {crids} crids, {reqs} requests")
 
     rows = len(df_other_low)
+    crids = count_crid(df_other_low)
     reqs = sum(df_other_low['count'])
     excel_d[f'Other_{tp}_low_domains'] = rows
+    excel_d[f'Other_{tp}_low_crids'] = crids
     excel_d[f'Other_{tp}_low_reqs'] = reqs
     low_priority_count += rows
-    logging.info(f"Other DSPs {tp} low-priority report contains {rows} rows, {reqs} requests")
+    logging.info(f"Other DSPs {tp} low-priority report contains {rows} rows, {crids} crids, {reqs} requests")
 
     df_solta_high = process_df(df_solta[df_solta['count'] >= 25])
     df_solta_low = process_df(df_solta[df_solta['count'] < 25])
 
     rows = len(df_solta_high)
+    crids = count_crid(df_solta_high)
     reqs = sum(df_solta_high['count'])
     excel_d[f'Solta_{tp}_high_domains'] = rows
+    excel_d[f'Solta_{tp}_high_crids'] = crids
     excel_d[f'Solta_{tp}_high_reqs'] = reqs
     high_priority_count += rows
-    logging.info(f"Solta {tp} high-priority report contains {rows} rows, {reqs} requests")
+    logging.info(f"Solta {tp} high-priority report contains {rows} rows, {crids} crids, {reqs} requests")
 
     rows = len(df_solta_low)
+    crids = count_crid(df_solta_low)
     reqs = sum(df_solta_low['count'])
     excel_d[f'Solta_{tp}_low_domains'] = rows
+    excel_d[f'Solta_{tp}_low_crids'] = crids
     excel_d[f'Solta_{tp}_low_reqs'] = reqs
     low_priority_count += rows
-    logging.info(f"Solta {tp} low-priority report contains {rows} rows, {reqs} requests")
+    logging.info(f"Solta {tp} low-priority report contains {rows} rows, {crids} crids, {reqs} requests")
 
     check_and_attach(message_high, {f'solta_{tp}_high': df_solta_high, f'other_{tp}_high': df_other_high})
     check_and_attach(message_low, {f'solta_{tp}_low': df_solta_low, f'other_{tp}_low': df_other_low})
@@ -175,13 +257,19 @@ def process_csv(message_high, message_low, path, tp):
     return flag_high, flag_low
 
 
+def process_unmoderated():
+    df = pd.read_csv(settings.report_unmoderated)
+    df.to_csv(f'{file_path}{today}unmoderated.csv', index=False)
+    excel_d["unmoderated"] = len(df)
+
+
 def main():
-    if os.path.exists(f'{file_path}/{today}'):
+    if os.path.exists(f'{file_path}{today}'):
         input('Отчет уже сформирован и должен был быть отправлен. Если этого не произошло, повторите отправку вручную')
         return
     os.mkdir(f'{file_path}\\{today}')
     os.mkdir(f'{file_path}_Reports_raw\\{today}')
-    os.mkdir(f'{file_path}!Date_reports\\{today_str}')
+    os.mkdir(f'{file_path}!Date_reports\\{today}')
 
     message_high = MIMEMultipart()
     message_high['From'] = settings.sender_email
@@ -198,6 +286,7 @@ def main():
 
     web_high_flag, web_low_flag = process_csv(message_high, message_low, report_web_file_url, 'web')
     app_high_flag, app_low_flag = process_csv(message_high, message_low, report_app_file_url, 'inapp')
+    process_unmoderated()
 
     high_attachment_flag = web_high_flag or app_high_flag
     low_attachment_flag = web_low_flag or app_low_flag
@@ -232,15 +321,16 @@ if today.weekday() == 0:
 elif today.weekday() in (5, 6):
     input('Сегодня выходной, по выходным мы отчеты не отправляем')
 
+
     def main():
         pass
 else:
     report_web_file_url = settings.report_web_file_weekdays_url
     report_app_file_url = settings.report_app_file_weekdays_url
 
-today_str = today.strftime("%Y-%m-%d")
+today = today.strftime("%Y-%m-%d")
 
-today = today.strftime("%d.%m.%Y")
+# today = today.strftime("%d.%m.%Y")
 
 email_subject = f'{settings.email_subject}{today}'
 
@@ -272,14 +362,18 @@ excel_d = {
     'Other_web_high_domains': 0, 'Other_inapp_high_domains': 0,
     'Solta_web_low_domains': 0, 'Solta_inapp_low_domains': 0,
     'Other_web_low_domains': 0, 'Other_inapp_low_domains': 0,
+    'Solta_web_high_crids': 0, 'Solta_inapp_high_crids': 0,
+    'Other_web_high_crids': 0, 'Other_inapp_high_crids': 0,
+    'Solta_web_low_crids': 0, 'Solta_inapp_low_crids': 0,
+    'Other_web_low_crids': 0, 'Other_inapp_low_crids': 0,
     'Solta_web_high_reqs': 0, 'Solta_inapp_high_reqs': 0,
     'Other_web_high_reqs': 0, 'Other_inapp_high_reqs': 0,
     'Solta_web_low_reqs': 0, 'Solta_inapp_low_reqs': 0,
-    'Other_web_low_reqs': 0, 'Other_inapp_low_reqs': 0
+    'Other_web_low_reqs': 0, 'Other_inapp_low_reqs': 0,
+    'unmoderated': 0
 }
 
 today_creatives = set()
-
 
 if __name__ == '__main__':
     try:
