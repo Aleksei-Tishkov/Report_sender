@@ -1,8 +1,9 @@
+import json
 import os
 
 import pandas
 import requests as requests
-from datetime import date
+from datetime import date, timedelta
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -117,20 +118,20 @@ async def update_log_files():
     df = pd.concat([df, new_row], ignore_index=True)
 
     df.to_excel(excel_path, index=False)
-    logging.info(f"Updated excel_log.xlsx with new row for {today}")
+    logging.info(f"Updated excel_log.xlsx with new row for {today_str}")
 
     for k in excel_d.keys():
         if k == 'dt':
             continue
         excel_d[k] = format_number(excel_d[k])
 
-    msg = format_message(excel_d, today)
+    msg = format_message(excel_d, today_str)
 
     with open(txt_path, 'a') as file:
         file.write(msg + '\n\n\n')
     await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
     if date.today().weekday() == 4:
-        msg = stats.weekly_statistics(creative_dictionary_path)
+        msg = stats.weekly_statistics(creative_dictionary_path, stuck_creatives_weekly_path)
         with open(txt_path, 'a') as file:
             file.write(msg + '\n\n\n')
         # await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
@@ -163,11 +164,11 @@ def check_and_attach(message, d):
     for filename, dataframe in d.items():
         if len(dataframe.index) > 0:
             attachment = MIMEBase('application', 'octet-stream')
-            dataframe.to_csv(f'{file_path}//{today}//{filename}_{today}.csv', index=False)
+            dataframe.to_csv(f'{file_path}//{today_str}//{filename}_{today_str}.csv', index=False)
             csv_data = dataframe.to_csv(index=False)
             attachment.set_payload(csv_data.encode('utf-8'))
             encoders.encode_base64(attachment)
-            attachment.add_header('Content-Disposition', f'attachment; filename="{filename}_{today}.csv"')
+            attachment.add_header('Content-Disposition', f'attachment; filename="{filename}_{today_str}.csv"')
             message.attach(attachment)
             logging.info(f'{filename} formed')
         else:
@@ -191,11 +192,21 @@ async def process_csv(message_high, message_low, path, tp):
 
     df = pd.read_csv(BytesIO(response.content))
 
+    yesterday = (today - pd.Timedelta(days=1)).strftime('%Y-%m-%d') if today.weekday() != 0 \
+        else (today - pd.Timedelta(days=3)).strftime('%Y-%m-%d')
+
+    with open(file_postprocessor.json_processed_path, 'r') as file:
+        json_data = json.load(file)
+
+    crid_list = json_data.get(yesterday, []) if json_data else []
+
+    df = df[~df['dcrid'].isin(crid_list)]
+
     today_creatives.update(df['dcrid'].unique())
 
-    df.to_csv(f'{file_path}//_Reports_raw//{today}//raw_{tp}_report_{today}.csv', index=False)
+    df.to_csv(f'{file_path}//_Reports_raw//{today_str}//raw_{tp}_report_{today_str}.csv', index=False)
 
-    # duplicate_crids, previous_day_crids = file_postprocessor.get_stuck_crids_from_json(date.today(), creative_dictionary_path)
+    # duplicate_crids, previous_day_crids = file_postprocessor.get_stuck_crids_from_json(date.today_str(), creative_dictionary_path)
     # crids_to_exclude = duplicate_crids.union(previous_day_crids)
 
     df_solta = df[df['dsp'] == 'solta'].iloc[:, 1:]
@@ -259,7 +270,7 @@ async def process_csv(message_high, message_low, path, tp):
 
 async def process_unmoderated():
     df = pd.read_csv(settings.report_unmoderated)
-    df.to_csv(f'{file_path}{today}//unmoderated.csv', index=False)
+    df.to_csv(f'{file_path}{today_str}//unmoderated.csv', index=False)
     excel_d["unmoderated"] = len(df)
 
 
@@ -269,12 +280,12 @@ async def send_email(server, email, message):
 
 
 async def main():
-    if os.path.exists(f'{file_path}{today}'):
+    if os.path.exists(f'{file_path}{today_str}'):
         input('Отчет уже сформирован и должен был быть отправлен. Если этого не произошло, повторите отправку вручную')
         return
-    os.makedirs(f'{file_path}\\{today}', exist_ok=True)
-    os.makedirs(f'{file_path}_Reports_raw\\{today}', exist_ok=True)
-    os.makedirs(f'{file_path}!Date_reports\\{today}', exist_ok=True)
+    os.makedirs(f'{file_path}\\{today_str}', exist_ok=True)
+    os.makedirs(f'{file_path}_Reports_raw\\{today_str}', exist_ok=True)
+    os.makedirs(f'{file_path}!Date_reports\\{today_str}', exist_ok=True)
 
     message_high = MIMEMultipart()
     message_high['From'] = settings.sender_email
@@ -302,18 +313,18 @@ async def main():
         if high_attachment_flag:
             await send_email(server, settings.receiver_email, message_high)
             logging.info(f'High-priority e-mail sent with {high_priority_count} rows in total')
-            print(f'High-priority e-mail за {today} отправлен, в нем {high_priority_count} строк в сумме.')
+            print(f'High-priority e-mail за {today_str} отправлен, в нем {high_priority_count} строк в сумме.')
         else:
             logging.info(f'High-priority e-mail is NOT sent')
-            print(f'High-priority e-mail за {today} не отправлен - отчеты пусты')
+            print(f'High-priority e-mail за {today_str} не отправлен - отчеты пусты')
         if low_attachment_flag:
             await send_email(server, settings.receiver_email, message_low)
             logging.info(f'Low-priority e-mail sent  with {low_priority_count} rows in total')
-            print(f'Low-priority e-mail за {today} отправлен, в нем {low_priority_count} строк в сумме')
+            print(f'Low-priority e-mail за {today_str} отправлен, в нем {low_priority_count} строк в сумме')
         else:
             logging.info(f'Low-priority e-mail is NOT sent')
-            print(f'Low-priority e-mail за {today} не отправлен - отчеты пусты')
-    stats.save_creatives(creative_dictionary_path, today, today_creatives)
+            print(f'Low-priority e-mail за {today_str} не отправлен - отчеты пусты')
+    stats.save_creatives(creative_dictionary_path, today_str, today_creatives)
     await update_log_files()
     logging.info('Process finished successfully' + '-' * 50 + '\n')
 
@@ -333,11 +344,11 @@ else:
     report_web_file_url = settings.report_web_file_weekdays_url
     report_app_file_url = settings.report_app_file_weekdays_url
 
-today = today.strftime("%Y-%m-%d")
+today_str = today.strftime("%Y-%m-%d")
 
-# today = today.strftime("%d.%m.%Y")
+# today_str = today_str.strftime("%d.%m.%Y")
 
-email_subject = f'{settings.email_subject}{today}'
+email_subject = f'{settings.email_subject}{today_str}'
 
 log_path = settings.file_path
 
@@ -363,7 +374,7 @@ high_priority_count = 0
 low_priority_count = 0
 
 excel_d = {
-    'dt': today, 'Solta_web_high_domains': 0, 'Solta_inapp_high_domains': 0,
+    'dt': today_str, 'Solta_web_high_domains': 0, 'Solta_inapp_high_domains': 0,
     'Other_web_high_domains': 0, 'Other_inapp_high_domains': 0,
     'Solta_web_low_domains': 0, 'Solta_inapp_low_domains': 0,
     'Other_web_low_domains': 0, 'Other_inapp_low_domains': 0,

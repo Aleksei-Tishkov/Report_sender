@@ -13,6 +13,8 @@ today = date.today().strftime("%Y-%m-%d")
 
 path = os.path.join(settings.file_path, f'Reports/!Date_reports/{today}')
 
+json_processed_path = os.path.join(settings.file_path, 'processed.json')
+
 
 def get_csv_files(path):
     return [f for f in os.listdir(path) if f.endswith('.csv')]
@@ -57,7 +59,19 @@ def process_files():
             for idx, row in df.iterrows():
                 dcrid_values = str(row['dcrid']).split('\n')
                 result.extend(dcrid_values)
+
     write_to_excel(result, os.path.join(path, f'dcrid_data_{today}.xlsx'))
+    try:
+        with open(json_processed_path, 'r') as file:
+            data = json.load(file)
+    except FileNotFoundError:
+        data = {}
+
+    data[today] = result
+    print(data)
+
+    with open(json_processed_path, 'w') as file:
+        json.dump(data, file)
 
     input('Нажмите что-то для завершения работы скрипта')
     return

@@ -28,8 +28,10 @@ def daily_statistics(creative_dictionary_path):
         logging.error("No previous data found.")
         return ''
 
-    today = datetime.today().strftime('%Y-%m-%d')
-    yesterday = (datetime.today() - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+    today = datetime.today()
+    yesterday = (today - pd.Timedelta(days=1)).strftime('%Y-%m-%d') if today.weekday() != 0 \
+        else (today - pd.Timedelta(days=3)).strftime('%Y-%m-%d')
+    today = today.strftime('%Y-%m-%d')
 
     if today not in data or yesterday not in data:
         logging.warning("Not enough data for comparison.")
@@ -51,7 +53,7 @@ def daily_statistics(creative_dictionary_path):
            f'{len(diff_creatives)} different crids, {len(repeated_creatives)} repeated crids'
 
 
-def weekly_statistics(creative_dictionary):
+def weekly_statistics(creative_dictionary_path, stuck_creatives_weekly_path):
     with open(creative_dictionary_path, 'r') as file:
         data = json.load(file)
 
