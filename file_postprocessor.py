@@ -68,13 +68,11 @@ def process_files():
         data = {}
 
     data[today] = result
-    print(data)
+    #print(data)
 
     with open(json_processed_path, 'w') as file:
         json.dump(data, file)
-
-    input('Нажмите что-то для завершения работы скрипта')
-    return
+    return len(result)
 
 
 def get_previous_working_day(today):

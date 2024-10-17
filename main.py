@@ -1,3 +1,4 @@
+import concurrent
 import json
 import os
 
@@ -27,9 +28,11 @@ def format_number(number):
     return number
 
 
+def pluralize(word, count):
+    return f"{word}{'' if count == 1 else 's'}"
+
+
 def format_message(excel_d, today):
-    def pluralize(word, count):
-        return f"{word}{'' if count == 1 else 's'}"
 
     msg = f"{today}\n\n"
 
@@ -130,7 +133,7 @@ async def update_log_files():
     with open(txt_path, 'a') as file:
         file.write(msg + '\n\n\n')
     await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
-    if date.today().weekday() == 4:
+    if date.today().weekday() == 0:
         msg = stats.weekly_statistics(creative_dictionary_path, stuck_creatives_weekly_path)
         with open(txt_path, 'a') as file:
             file.write(msg + '\n\n\n')
@@ -174,6 +177,18 @@ def check_and_attach(message, d):
         else:
             logging.info(f'{filename} is empty')
             print(f'{filename} пуст')
+
+
+async def post_process_files():
+    loop = asyncio.get_event_loop()  # Получаем текущий цикл событий
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        print('Запускаем process_files() в пуле потоков')
+        crid_quantity = await loop.run_in_executor(pool, file_postprocessor.process_files)
+
+    msg = f'{today_str}\n\n{pluralize("Crid", crid_quantity)} sent on moderation: {crid_quantity}'
+
+    await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
+    input('Нажмите что-то для завершения работы скрипта')
 
 
 async def process_csv(message_high, message_low, path, tp):
@@ -327,6 +342,16 @@ async def main():
     stats.save_creatives(creative_dictionary_path, today_str, today_creatives)
     await update_log_files()
     logging.info('Process finished successfully' + '-' * 50 + '\n')
+    while True:
+        try:
+            flag = bool(int(input('Хотите запустить постобработку отчетов? 1 - да, 0 - нет\n')))
+            if flag:
+                await post_process_files()  # Используем await, а не asyncio.run()
+                break
+            else:
+                break
+        except ValueError:
+            print("Введите корректное значение: 1 или 0")
 
 
 today = date.today()
@@ -393,17 +418,7 @@ today_creatives = set()
 
 if __name__ == '__main__':
     try:
-        asyncio.run(main())
-        while True:
-            try:
-                flag = bool(int(input('Хотите запустить постобработку отчетов? 1 - да, 0 - нет\n')))
-                if flag:
-                    file_postprocessor.process_files()
-                    break
-                else:
-                    break
-            except:
-                continue
+        asyncio.run(main())  # Запускаем событийный цикл только один раз
     except Exception as e:
         input(f'Process terminated with Exception: {e}')
         logging.exception(e)
