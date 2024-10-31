@@ -35,17 +35,11 @@ def pluralize(word, count):
     return f"{word}{'' if count == 1 else 's'}"
 
 
-async def send_message_with_retry(chat_id, text, retries=3, delay=2):
-    for attempt in range(retries):
-        try:
-            await bot.send_message(chat_id=chat_id, text=text)
-            break  # Успешная отправка — выходим из цикла
-        except TimedOut:
-            if attempt < retries - 1:
-                print(f"Warning: Timeout occurred, retrying in {delay} seconds...")
-                await asyncio.sleep(delay)
-            else:
-                print("Error: TimedOut. Message could not be sent after multiple attempts.")
+async def send_message_with_retry(chat_id, text):
+    try:
+        await bot.send_message(chat_id=chat_id, text=text)
+    except TimedOut:
+        print(f'Error: TimedOut. Message could not be sent: \n{text}')
 
 
 def format_message(excel_d, today):
@@ -145,6 +139,7 @@ async def update_log_files():
 
     with open(txt_path, 'a') as file:
         file.write(msg + '\n\n\n')
+
     await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
 
     if date.today().weekday() == 0:
@@ -154,7 +149,7 @@ async def update_log_files():
                                       settings.file_path)
         with open(txt_path, 'a') as file:
             file.write(msg + '\n\n\n')
-        # await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
+        # await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
 
 
 def process_df(df: pandas.DataFrame):
@@ -377,7 +372,6 @@ if today.weekday() == 0:
     report_app_file_url = settings.report_app_file_weekends_url
 elif today.weekday() in (5, 6):
     input('Сегодня выходной, по выходным мы отчеты не отправляем')
-
 
     def main():
         pass
