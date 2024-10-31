@@ -54,14 +54,13 @@ def daily_statistics(creative_dictionary_path):
            f'{len(diff_creatives)} different crids, {len(repeated_creatives)} repeated crids'
 
 
-def weekly_statistics(creative_dictionary_path, stuck_creatives_weekly_path):
+def weekly_statistics(creative_dictionary_path, stuck_creatives_weekly_path, today_creatives, file_path):
     with open(creative_dictionary_path, 'r') as file:
         data = json.load(file)
 
     today = datetime.today().strftime('%Y-%m-%d')
     last_week_dates = [(datetime.today() - timedelta(days=i)).strftime('%Y-%m-%d') for i in range(7)]
 
-    # Фильтруем данные только за последнюю неделю
     weekly_data = {date: set(data[date]) for date in last_week_dates if date in data}
 
     if len(weekly_data) < 2:
@@ -74,7 +73,6 @@ def weekly_statistics(creative_dictionary_path, stuck_creatives_weekly_path):
     new_creatives_per_day = []
     repeated_creatives_per_day = []
     stuck_creatives = set()
-
     all_creatives_week = set()  # Для хранения всех креативов за неделю
     appearances = defaultdict(int)
 
@@ -110,7 +108,6 @@ def weekly_statistics(creative_dictionary_path, stuck_creatives_weekly_path):
 
     # Определяем креативы, которые появились несколько раз за неделю
     intersection_creatives_week = {creative for creative, count in appearances.items() if count > 1}
-    print(intersection_creatives_week)
 
     # Сохраняем пересечение всех креативов за неделю в CSV
     with open(stuck_creatives_weekly_path, 'w', newline='') as csvfile:
@@ -126,19 +123,31 @@ def weekly_statistics(creative_dictionary_path, stuck_creatives_weekly_path):
     max_new_creatives = max(new_creatives_per_day, default=0)
     max_repeated_creatives = max(repeated_creatives_per_day, default=0)
 
+    # Вычисляем креативы, которые отсутствуют в сегодняшних данных
+    moderated_creatives = all_creatives_week - today_creatives
+
+    # Формируем ключ для JSON (дата начала недели - дата конца недели)
+    week_key = f"{last_week_dates[-1]} - {last_week_dates[0]}"
+
+    csv_filename = f"{last_week_dates[-1]}_moderated_creatives.csv"
+    moderated_creatives_path = os.path.join(file_path, csv_filename)
+
+    with open(moderated_creatives_path, 'w', newline='') as csvfile:
+        csv.writer(csvfile).writerow(["'" + "', '".join(str(creative) for creative in moderated_creatives) + "'"])
+
     # Формируем вывод
     result = (
-        f"Weekly Statistics ({last_week_dates[-1]} - {last_week_dates[0]}):\n"
-        f"Total new creatives: {total_new_creatives}\n"
-        f"Total repeated creatives: {total_repeated_creatives}\n"
-        f"Average new creatives per day: {avg_new_creatives:.2f}\n"
-        f"Average repeated creatives per day: {avg_repeated_creatives:.2f}\n"
-        f"Max new creatives in a day: {max_new_creatives}\n"
-        f"Max repeated creatives in a day: {max_repeated_creatives}\n"
-        f"Stuck creatives (reappearing multiple days): {len(stuck_creatives)}\n{'-' * 50}\n\n"
+        f"Weekly Statistics ({last_week_dates[-1]} - {last_week_dates[0]}):\n\n"
+        #f"Total new creatives: {total_new_creatives}\n"
+        #f"Total repeated creatives: {total_repeated_creatives}\n"
+        #f"Average new creatives per day: {avg_new_creatives:.2f}\n"
+        #f"Average repeated creatives per day: {avg_repeated_creatives:.2f}\n"
+        #f"Max new creatives in a day: {max_new_creatives}\n"
+        #f"Max repeated creatives in a day: {max_repeated_creatives}\n"
+        f"Successfully moderated creatives: {len(moderated_creatives)}\n"
+        f"Stuck creatives (reappearing multiple days): {len(stuck_creatives)}"
     )
 
-    logging.info(result)
-    print(result)
+    logging.info(result + f'\n{"-" * 50}\n\n')
 
     return result

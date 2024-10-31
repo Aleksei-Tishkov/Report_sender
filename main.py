@@ -14,8 +14,11 @@ import pandas as pd
 from io import BytesIO
 import logging
 
+import time
 from telegram import Bot
 import asyncio
+
+from telegram.error import TimedOut
 
 import file_postprocessor
 
@@ -32,10 +35,21 @@ def pluralize(word, count):
     return f"{word}{'' if count == 1 else 's'}"
 
 
+async def send_message_with_retry(chat_id, text, retries=3, delay=2):
+    for attempt in range(retries):
+        try:
+            await bot.send_message(chat_id=chat_id, text=text)
+            break  # Успешная отправка — выходим из цикла
+        except TimedOut:
+            if attempt < retries - 1:
+                print(f"Warning: Timeout occurred, retrying in {delay} seconds...")
+                await asyncio.sleep(delay)
+            else:
+                print("Error: TimedOut. Message could not be sent after multiple attempts.")
+
+
 def format_message(excel_d, today):
-
     msg = f"{today}\n\n"
-
     high_priority = []
     if excel_d.get('Solta_web_high_domains') != '0':
         domains = excel_d['Solta_web_high_domains']
@@ -101,7 +115,6 @@ def format_message(excel_d, today):
                             f"{crids} {pluralize('crid', crids)}, "
                             f"{requests} {pluralize('request', requests)}")
 
-    # print(low_priority, high_priority)
     if low_priority:
         msg += "LOW PRIORITY\n\n" + "\n".join(low_priority)
     else:
@@ -132,9 +145,13 @@ async def update_log_files():
 
     with open(txt_path, 'a') as file:
         file.write(msg + '\n\n\n')
-    await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
+    await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
+
     if date.today().weekday() == 0:
-        msg = stats.weekly_statistics(creative_dictionary_path, stuck_creatives_weekly_path)
+        msg = stats.weekly_statistics(creative_dictionary_path,
+                                      stuck_creatives_weekly_path,
+                                      today_creatives,
+                                      settings.file_path)
         with open(txt_path, 'a') as file:
             file.write(msg + '\n\n\n')
         # await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
@@ -182,12 +199,11 @@ def check_and_attach(message, d):
 async def post_process_files():
     loop = asyncio.get_event_loop()  # Получаем текущий цикл событий
     with concurrent.futures.ThreadPoolExecutor() as pool:
-        print('Запускаем process_files() в пуле потоков')
         crid_quantity = await loop.run_in_executor(pool, file_postprocessor.process_files)
 
     msg = f'{today_str}\n\n{pluralize("Crid", crid_quantity)} sent on moderation: {crid_quantity}'
 
-    await bot.send_message(chat_id=settings.tg_recipient_id, text=msg)
+    await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
     input('Нажмите что-то для завершения работы скрипта')
 
 
@@ -326,14 +342,14 @@ async def main():
         server.starttls()
         server.login(settings.sender_email, settings.sender_password)
         if high_attachment_flag:
-            await send_email(server, settings.receiver_email, message_high)
+            # await send_email(server, settings.receiver_email, message_high)
             logging.info(f'High-priority e-mail sent with {high_priority_count} rows in total')
             print(f'High-priority e-mail за {today_str} отправлен, в нем {high_priority_count} строк в сумме.')
         else:
             logging.info(f'High-priority e-mail is NOT sent')
             print(f'High-priority e-mail за {today_str} не отправлен - отчеты пусты')
         if low_attachment_flag:
-            await send_email(server, settings.receiver_email, message_low)
+            # await send_email(server, settings.receiver_email, message_low)
             logging.info(f'Low-priority e-mail sent  with {low_priority_count} rows in total')
             print(f'Low-priority e-mail за {today_str} отправлен, в нем {low_priority_count} строк в сумме')
         else:
@@ -417,8 +433,8 @@ excel_d = {
 today_creatives = set()
 
 if __name__ == '__main__':
-    try:
-        asyncio.run(main())  # Запускаем событийный цикл только один раз
-    except Exception as e:
-        input(f'Process terminated with Exception: {e}')
-        logging.exception(e)
+    #try:
+    asyncio.run(main())  # Запускаем событийный цикл только один раз
+    #except Exception as e:
+        #input(f'Process terminated with Exception: {e}')
+        #logging.exception(e)
