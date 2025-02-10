@@ -58,9 +58,11 @@ def process_files():
         if 'dcrid' in df.columns:
             for idx, row in df.iterrows():
                 dcrid_values = str(row['dcrid']).split('\n')
-                variant_values = str(row['variant_id']).split('\n')
+                variant_values = str(row['variant_id']).split(', \n')
                 result_crids.extend(dcrid_values)
-                result_variants.extend(variant_values)
+                for v in variant_values:
+                    v = v.split(', ')
+                    result_variants.extend(v)
 
     write_to_excel(result_crids, os.path.join(path, f'dcrid_data_{today}.xlsx'))
     try:
