@@ -38,7 +38,7 @@ def process_files():
         else:
             break
 
-    result = []
+    result_crids, result_variants = [], []
 
     for file in csv_files:
         df = pd.read_csv(os.path.join(path, file))
@@ -58,21 +58,22 @@ def process_files():
         if 'dcrid' in df.columns:
             for idx, row in df.iterrows():
                 dcrid_values = str(row['dcrid']).split('\n')
-                result.extend(dcrid_values)
+                variant_values = str(row['variant_id']).split('\n')
+                result_crids.extend(dcrid_values)
+                result_variants.extend(variant_values)
 
-    write_to_excel(result, os.path.join(path, f'dcrid_data_{today}.xlsx'))
+    write_to_excel(result_crids, os.path.join(path, f'dcrid_data_{today}.xlsx'))
     try:
         with open(json_processed_path, 'r') as file:
             data = json.load(file)
     except FileNotFoundError:
         data = {}
 
-    data[today] = result
-    #print(data)
+    data[today] = {'crids': result_crids, 'variants': result_variants}
 
     with open(json_processed_path, 'w') as file:
         json.dump(data, file)
-    return len(result)
+    return len(result_crids)
 
 
 def get_previous_working_day(today):
@@ -100,11 +101,11 @@ def get_stuck_crids_from_json(today, json_path):
     crid_weekly_sets = []
     for date in previous_week_dates:
         if date in crid_data:
-            crid_weekly_sets.extend(crid_data[date])
+            crid_weekly_sets.extend(crid_data[date]['crids'])
 
     previous_day_crids = set()
     if previous_working_day in crid_data:
-        previous_day_crids = set(crid_data[previous_working_day])
+        previous_day_crids = set(crid_data[previous_working_day]['crids'])
 
     # Находим crid-ы, которые встречаются более одного раза
     crid_counts = pd.Series(crid_weekly_sets).value_counts()

@@ -149,19 +149,30 @@ async def update_log_files():
                                       settings.file_path)
         with open(txt_path, 'a') as file:
             file.write(msg + '\n\n\n')
-        # await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
+        await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
 
 
 def process_df(df: pandas.DataFrame):
+    df = df.copy()
+
+    df['variant_id'] = df['variant_id'].astype(str)  # Явно переводим variant_id в строку
+    df['dcrid'] = df['dcrid'].astype(str)  # Убеждаемся, что dcrid тоже строка
+
+    # Формируем новый variant_id
+    df.loc[:, 'variant_id'] = df['dcrid'].str.split('.').str[0] + '.' + df['variant_id']
+    today_variants.update(df['variant_id'].unique())
+
     first_group = df.groupby(['adomain', 'dcid']).agg({
         'dcrid': lambda x: '\n'.join(map(str, x)),
-        'count': 'sum'
+        'count': 'sum',
+        'variant_id': lambda x: ', '.join(map(str, set(x)))  # Добавляем variant_id
     }).reset_index()
 
     second_group = first_group.groupby(['adomain']).agg({
         'dcid': lambda x: '\n'.join(sorted(set(map(str, x)))),
         'dcrid': lambda x: '\n'.join(sorted(set('\n'.join(map(str, x)).split('\n')))),
-        'count': 'sum'
+        'count': 'sum',
+        'variant_id': lambda x: ', '.join(sorted(set(', '.join(map(str, x)).split(', '))))  # Учитываем variant_id
     }).reset_index()
 
     result = second_group.sort_values(by='count', ascending=False)
@@ -305,9 +316,23 @@ async def send_email(server, email, message):
     server.sendmail(settings.sender_email, email, message.as_string())
 
 
+async def run_post_process():
+    while True:
+        try:
+            flag = bool(int(input('Хотите запустить постобработку отчетов? 1 - да, 0 - нет\n')))
+            if flag:
+                await post_process_files()
+                break
+            else:
+                break
+        except ValueError:
+            print("Введите корректное значение: 1 или 0")
+
+
 async def main():
     if os.path.exists(f'{file_path}{today_str}'):
         input('Отчет уже сформирован и должен был быть отправлен. Если этого не произошло, повторите отправку вручную')
+        await run_post_process()
         return
     os.makedirs(f'{file_path}\\{today_str}', exist_ok=True)
     os.makedirs(f'{file_path}_Reports_raw\\{today_str}', exist_ok=True)
@@ -337,32 +362,23 @@ async def main():
         server.starttls()
         server.login(settings.sender_email, settings.sender_password)
         if high_attachment_flag:
-            # await send_email(server, settings.receiver_email, message_high)
+            await send_email(server, settings.receiver_email, message_high)
             logging.info(f'High-priority e-mail sent with {high_priority_count} rows in total')
             print(f'High-priority e-mail за {today_str} отправлен, в нем {high_priority_count} строк в сумме.')
         else:
             logging.info(f'High-priority e-mail is NOT sent')
             print(f'High-priority e-mail за {today_str} не отправлен - отчеты пусты')
         if low_attachment_flag:
-            # await send_email(server, settings.receiver_email, message_low)
+            await send_email(server, settings.receiver_email, message_low)
             logging.info(f'Low-priority e-mail sent  with {low_priority_count} rows in total')
             print(f'Low-priority e-mail за {today_str} отправлен, в нем {low_priority_count} строк в сумме')
         else:
             logging.info(f'Low-priority e-mail is NOT sent')
             print(f'Low-priority e-mail за {today_str} не отправлен - отчеты пусты')
-    stats.save_creatives(creative_dictionary_path, today_str, today_creatives)
+    stats.save_creatives(creative_dictionary_path, today_str, today_creatives, today_variants)
     await update_log_files()
     logging.info('Process finished successfully' + '-' * 50 + '\n')
-    while True:
-        try:
-            flag = bool(int(input('Хотите запустить постобработку отчетов? 1 - да, 0 - нет\n')))
-            if flag:
-                await post_process_files()  # Используем await, а не asyncio.run()
-                break
-            else:
-                break
-        except ValueError:
-            print("Введите корректное значение: 1 или 0")
+    await run_post_process()
 
 
 today = date.today()
@@ -424,7 +440,8 @@ excel_d = {
     'unmoderated': 0
 }
 
-today_creatives = set()
+today_creatives, today_variants = set(), set()
+
 
 if __name__ == '__main__':
     #try:

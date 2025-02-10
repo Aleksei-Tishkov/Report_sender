@@ -8,14 +8,14 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 
-def save_creatives(creative_dictionary_path, date, creatives):
+def save_creatives(creative_dictionary_path, date, crids, variants):
     try:
         with open(creative_dictionary_path, 'r') as file:
             data = json.load(file)
     except FileNotFoundError:
         data = {}
 
-    data[date] = list(creatives)
+    data[date] = {"crids": list(crids), "variants": list(variants)}
 
     with open(creative_dictionary_path, 'w') as file:
         json.dump(data, file)
@@ -60,10 +60,9 @@ def weekly_statistics(creative_dictionary_path, stuck_creatives_weekly_path, tod
 
     today = datetime.today().strftime('%Y-%m-%d')
     last_week_dates = [(datetime.today() - timedelta(days=i)).strftime('%Y-%m-%d') for i in range(7)]
+    weekly_crids = {date: set(data[date]['crids']) for date in last_week_dates if date in data}
 
-    weekly_data = {date: set(data[date]) for date in last_week_dates if date in data}
-
-    if len(weekly_data) < 2:
+    if len(weekly_crids) < 2:
         logging.warning("Not enough data for weekly statistics.")
         return ''
 
@@ -78,8 +77,10 @@ def weekly_statistics(creative_dictionary_path, stuck_creatives_weekly_path, tod
 
     # Пройдем по каждому дню недели и посчитаем нужную статистику
     for i in range(1, len(last_week_dates)):
-        today_set = weekly_data.get(last_week_dates[i], set())
-        yesterday_set = weekly_data.get(last_week_dates[i - 1], set())
+        curr_variants = weekly_crids.get(last_week_dates[i])
+
+        today_set = weekly_crids.get(last_week_dates[i], set())
+        yesterday_set = weekly_crids.get(last_week_dates[i - 1], set())
 
         if not today_set:
             continue
@@ -132,8 +133,9 @@ def weekly_statistics(creative_dictionary_path, stuck_creatives_weekly_path, tod
     csv_filename = f"{last_week_dates[-1]}_moderated_creatives.csv"
     moderated_creatives_path = os.path.join(file_path, csv_filename)
 
-    with open(moderated_creatives_path, 'w', newline='') as csvfile:
-        csv.writer(csvfile).writerow(["'" + "', '".join(str(creative) for creative in moderated_creatives) + "'"])
+    #with open(moderated_creatives_path, 'w', newline='') as csvfile:
+        #csv.writer(csvfile).writerow(["'" + "', '".join(str(creative) for creative in moderated_creatives) + "'"])
+        #csv.writer(csvfile).writerow(weekly_variants)
 
     # Формируем вывод
     result = (
