@@ -11,13 +11,14 @@ MAX_EXCEL_STR_LEN = 32767
 
 today = date.today().strftime("%Y-%m-%d")
 
-path = os.path.join(settings.file_path, f'Reports/!Date_reports/{today}')
+path = os.path.join(settings.file_path, f'Reports/{today}')
+p_path = os.path.join(settings.file_path, f'Reports/')
 
 json_processed_path = os.path.join(settings.file_path, 'processed.json')
 
 
 def get_csv_files(path):
-    return [f for f in os.listdir(path) if f.endswith('.csv')]
+    return [f for f in os.listdir(path) if f.endswith('.csv') and f != 'unmoderated.csv']
 
 
 def write_to_excel(data, output_file):
@@ -46,7 +47,7 @@ def process_files():
         while True:
             try:
                 num_rows = int(input(f"Сколько строк обработать из файла {file}? (Максимум {len(df)} строк): "))
-                if 0 < num_rows <= len(df):
+                if 0 <= num_rows <= len(df):
                     break
                 else:
                     print(f"Введите число от 1 до {len(df)}.")
@@ -64,7 +65,7 @@ def process_files():
                     v = v.split(', ')
                     result_variants.extend(v)
 
-    write_to_excel(result_crids, os.path.join(path, f'dcrid_data_{today}.xlsx'))
+    write_to_excel(result_crids, os.path.join(p_path, f'!Date_reports/dcrid_data_{today}.xlsx'))
     try:
         with open(json_processed_path, 'r') as file:
             data = json.load(file)
