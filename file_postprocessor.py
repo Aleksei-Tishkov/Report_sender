@@ -6,7 +6,6 @@ from datetime import date, timedelta
 
 import settings
 
-
 MAX_EXCEL_STR_LEN = 32767
 
 today = date.today().strftime("%Y-%m-%d")
@@ -30,42 +29,101 @@ def write_to_excel(data, output_file):
     wb.save(output_file)
 
 
-def process_files():
-    while True:
-        csv_files = get_csv_files(path)
-        if not csv_files:
-            input(f'В папке {today} нет исходных файлов. Убедитесь в их наличии и нажмите что-нибудь')
-            continue
-        else:
-            break
+def process_files(func):
+    """
+        Функция для обработки файлов на основе последнего сообщения из чата.
+        Теперь работает в автоматическом режиме без ручного ввода.
+        """
+    import re
+    import os
+    import json
+    import pandas as pd
+    import asyncio
+
+    # Получаем последнее сообщение из модерационного чата
+    try:
+        # Запускаем асинхронный код в синхронной функции
+        message_text = asyncio.run(func())
+        print(message_text)
+    except Exception as e:
+        print(f"Ошибка при получении сообщения из чата: {e}")
+        return 0
+
+    if not message_text or not message_text.startswith("Сегодня отправила на модерацию"):
+        print("Не найдено подходящее сообщение для обработки")
+        return 0
+
+    # Извлекаем информацию о файлах и количестве строк
+    file_pattern = r'([A-Za-z]+ (?:web|inapp) (?:high|low)) \((\d+)\)'
+    file_matches = re.findall(file_pattern, message_text, re.IGNORECASE)
+
+    if not file_matches:
+        print("Не удалось найти информацию о файлах в сообщении")
+        return 0
+
+    # Словарь соответствия названий в сообщении и реальных имен файлов
+    file_name_mapping = {
+        'solta web high': f'solta_web_high_{today}.csv',
+        'solta inapp high': f'solta_inapp_high_{today}.csv',
+        'other web high': f'other_web_high_{today}.csv',
+        'other inapp high': f'other_inapp_high_{today}.csv',
+        'solta web low': f'solta_web_low_{today}.csv',
+        'solta inapp low': f'solta_inapp_low_{today}.csv',
+        'other web low': f'other_web_low_{today}.csv',
+        'other inapp low': f'other_inapp_low_{today}.csv'
+    }
+
+    # Получаем список CSV файлов
+    def get_csv_files(directory):
+        if not os.path.exists(directory):
+            return []
+        return [f for f in os.listdir(directory) if f.endswith('.csv')]
+
+    csv_files = get_csv_files(path)
+    if not csv_files:
+        print(f'В папке {today} нет исходных файлов.')
+        return 0
 
     result_crids, result_variants = [], []
 
-    for file in csv_files:
-        df = pd.read_csv(os.path.join(path, file))
+    # Обрабатываем каждый файл, указанный в сообщении
+    for file_desc, num_rows_str in file_matches:
+        print(file_desc, num_rows_str)
+        file_desc_lower = file_desc.lower()
+        file_name = file_name_mapping.get(file_desc_lower)
 
-        while True:
-            try:
-                num_rows = int(input(f"Сколько строк обработать из файла {file}? (Максимум {len(df)} строк): "))
-                if 0 <= num_rows <= len(df):
-                    break
-                else:
-                    print(f"Введите число от 1 до {len(df)}.")
-            except ValueError:
-                print("Введите корректное число.")
+        if not file_name or file_name not in csv_files:
+            print(f"Файл {file_desc} не найден")
+            continue
 
-        df = df.head(num_rows)
+        try:
+            num_rows = int(num_rows_str)
+            if num_rows <= 0:
+                continue
 
-        if 'dcrid' in df.columns:
-            for idx, row in df.iterrows():
-                dcrid_values = str(row['dcrid']).split('\n')
-                variant_values = str(row['variant_id']).split(', \n')
-                result_crids.extend(dcrid_values)
-                for v in variant_values:
-                    v = v.split(', ')
-                    result_variants.extend(v)
+            df = pd.read_csv(os.path.join(path, file_name))
 
+            # Проверяем, что количество строк не превышает размер файла
+            if num_rows > len(df):
+                num_rows = len(df)
+
+            df = df.head(num_rows)
+
+            if 'dcrid' in df.columns:
+                for idx, row in df.iterrows():
+                    dcrid_values = str(row['dcrid']).split('\n')
+                    variant_values = str(row['variant_id']).split(', \n')
+                    result_crids.extend(dcrid_values)
+                    for v in variant_values:
+                        v = v.split(', ')
+                        result_variants.extend(v)
+        except Exception as e:
+            print(f"Ошибка при обработке файла {file_name}: {e}")
+
+    # Записываем результаты в Excel
     write_to_excel(result_crids, os.path.join(p_path, f'!Date_reports/dcrid_data_{today}.xlsx'))
+
+    # Сохраняем данные в JSON
     try:
         with open(json_processed_path, 'r') as file:
             data = json.load(file)
@@ -76,6 +134,7 @@ def process_files():
 
     with open(json_processed_path, 'w') as file:
         json.dump(data, file)
+
     return len(result_crids)
 
 

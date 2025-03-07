@@ -14,7 +14,6 @@ import pandas as pd
 from io import BytesIO
 import logging
 
-import time
 from telegram import Bot
 import asyncio
 
@@ -203,13 +202,29 @@ def check_and_attach(message, d):
 
 
 async def post_process_files():
-    loop = asyncio.get_event_loop()  # Получаем текущий цикл событий
+    """
+        Асинхронная функция для обработки файлов и отправки сообщения.
+        Сохраняет прежнее название, но теперь работает без ручного ввода.
+        """
+    import asyncio
+    import concurrent.futures
+    from datetime import datetime
+
+    today_str = datetime.now().strftime('%d.%m.%Y')
+
+    loop = asyncio.get_event_loop()
+
     with concurrent.futures.ThreadPoolExecutor() as pool:
-        crid_quantity = await loop.run_in_executor(pool, file_postprocessor.process_files)
+        crid_quantity = await loop.run_in_executor(pool, file_postprocessor.process_files, get_moderation_message_from_chat)
 
-    msg = f'{today_str}\n\n{pluralize("Crid", crid_quantity)} sent on moderation: {crid_quantity}'
+    if crid_quantity > 0:
+        msg = f'{today_str}\n\n{pluralize("Crid", crid_quantity)} sent on moderation: {crid_quantity}'
+        await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
+    else:
+        msg = f'{today_str}\n\nНе удалось обработать файлы. Проверьте наличие файлов и формат сообщения.'
+        await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
 
-    await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
+    print('Обработка завершена')
     input('Нажмите что-то для завершения работы скрипта')
 
 
@@ -316,23 +331,95 @@ async def send_email(server, email, message):
     server.sendmail(settings.sender_email, email, message.as_string())
 
 
-async def run_post_process():
-    while True:
-        try:
-            flag = bool(int(input('Хотите запустить постобработку отчетов? 1 - да, 0 - нет\n')))
-            if flag:
-                await post_process_files()
-                break
-            else:
-                break
-        except ValueError:
-            print("Введите корректное значение: 1 или 0")
+def setup_message_handler():
+    """
+    Настраивает обработчик для сообщений в боте.
+    Использует метод get_updates для периодической проверки сообщений.
+    """
+    import asyncio
+    import threading
+
+    async def check_messages(chat_id):
+        """
+        Асинхронная функция для проверки новых сообщений.
+        """
+        last_update_id = 0
+
+        while True:
+            try:
+                # Получаем обновления с момента последнего полученного ID
+                updates = await bot.get_updates(offset=last_update_id + 1, timeout=30)
+
+                for update in updates:
+                    last_update_id = update.update_id
+
+                    # Проверяем сообщения
+                    if hasattr(update, 'message') and update.message and update.message.text:
+                        if update.message.text.startswith("Сегодня отправила на модерацию"):
+                            # Отвечаем в чат о начале обработки
+                            await bot.send_message(
+                                chat_id=chat_id,
+                                text="Начинаю автоматическую обработку файлов..."
+                            )
+
+                            # Запускаем обработку файлов
+                            await post_process_files()
+
+                            # Отправляем сообщение о завершении
+                            await bot.send_message(
+                                chat_id=settings.tg_recipient_id,
+                                text="Обработка файлов завершена."
+                            )
+
+            except Exception as e:
+                print(f"Ошибка при проверке сообщений: {e}")
+
+            # Ждем небольшой промежуток времени перед следующей проверкой
+            await asyncio.sleep(5)
+
+    # Запускаем проверку сообщений в отдельном потоке
+    def run_async_loop():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(check_messages())
+
+    thread = threading.Thread(target=run_async_loop, daemon=True)
+    thread.start()
+
+    print("Обработчик сообщений для автоматической обработки файлов запущен")
+    return thread
+
+
+async def get_moderation_message_from_chat(chat_id=settings.tg_recipient_id):
+    """
+    Асинхронная функция для получения последнего сообщения о модерации
+    с использованием объекта Bot.
+    """
+    try:
+        updates = await bot.get_updates(limit=2)
+        print(updates)
+        for update in reversed(updates):
+            if (hasattr(update, 'message') and update.message and
+                    update.message.chat.id == chat_id and
+                    update.message.text and
+                    update.message.text.startswith("Сегодня отправила на модерацию")):
+                return update.message.text
+
+        # Если определенный chat_id недоступен, ищем в любом чате
+        for update in reversed(updates):
+            if (hasattr(update, 'message') and update.message and
+                    update.message.text and
+                    update.message.text.startswith("Сегодня отправила на модерацию")):
+                return update.message.text
+
+    except Exception as e:
+        print(f"Ошибка при получении сообщений из чата: {e}")
 
 
 async def main():
     if os.path.exists(f'{file_path}{today_str}'):
         input('Отчет уже сформирован и должен был быть отправлен. Если этого не произошло, повторите отправку вручную')
-        await run_post_process()
+        await post_process_files()
         return
     os.makedirs(f'{file_path}\\{today_str}', exist_ok=True)
     os.makedirs(f'{file_path}_Reports_raw\\{today_str}', exist_ok=True)
@@ -378,7 +465,7 @@ async def main():
     stats.save_creatives(creative_dictionary_path, today_str, today_creatives, today_variants)
     await update_log_files()
     logging.info('Process finished successfully' + '-' * 50 + '\n')
-    await run_post_process()
+    await post_process_files()
 
 
 today = date.today()
