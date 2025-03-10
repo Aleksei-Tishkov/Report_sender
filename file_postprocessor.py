@@ -29,7 +29,7 @@ def write_to_excel(data, output_file):
     wb.save(output_file)
 
 
-def process_files(func):
+def process_files(message_text):
     """
         Функция для обработки файлов на основе последнего сообщения из чата.
         Теперь работает в автоматическом режиме без ручного ввода.
@@ -38,16 +38,6 @@ def process_files(func):
     import os
     import json
     import pandas as pd
-    import asyncio
-
-    # Получаем последнее сообщение из модерационного чата
-    try:
-        # Запускаем асинхронный код в синхронной функции
-        message_text = asyncio.run(func())
-        print(message_text)
-    except Exception as e:
-        print(f"Ошибка при получении сообщения из чата: {e}")
-        return 0
 
     if not message_text or not message_text.startswith("Сегодня отправила на модерацию"):
         print("Не найдено подходящее сообщение для обработки")

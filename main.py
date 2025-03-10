@@ -201,33 +201,6 @@ def check_and_attach(message, d):
             print(f'{filename} пуст')
 
 
-async def post_process_files():
-    """
-        Асинхронная функция для обработки файлов и отправки сообщения.
-        Сохраняет прежнее название, но теперь работает без ручного ввода.
-        """
-    import asyncio
-    import concurrent.futures
-    from datetime import datetime
-
-    today_str = datetime.now().strftime('%d.%m.%Y')
-
-    loop = asyncio.get_event_loop()
-
-    with concurrent.futures.ThreadPoolExecutor() as pool:
-        crid_quantity = await loop.run_in_executor(pool, file_postprocessor.process_files, get_moderation_message_from_chat)
-
-    if crid_quantity > 0:
-        msg = f'{today_str}\n\n{pluralize("Crid", crid_quantity)} sent on moderation: {crid_quantity}'
-        await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
-    else:
-        msg = f'{today_str}\n\nНе удалось обработать файлы. Проверьте наличие файлов и формат сообщения.'
-        await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
-
-    print('Обработка завершена')
-    input('Нажмите что-то для завершения работы скрипта')
-
-
 async def process_csv(message_high, message_low, path, tp):
     global high_priority_count, low_priority_count
     flag_high, flag_low = False, False
@@ -331,53 +304,132 @@ async def send_email(server, email, message):
     server.sendmail(settings.sender_email, email, message.as_string())
 
 
+async def get_moderation_message_from_chat(chat_id=settings.tg_recipient_id):
+    """
+    Асинхронная функция для получения последнего сообщения о модерации
+    с использованием объекта Bot.
+    """
+    while True:
+        try:
+            updates = await bot.get_updates(limit=5)
+            for update in reversed(updates):
+                if (hasattr(update, 'message') and update.message and
+                        update.message.date.date() == date.today() and
+                        update.message.chat.id == int(chat_id) and
+                        update.message.text and
+                        update.message.text.startswith("Сегодня отправила на модерацию")):
+                    return update.message.text
+        except Exception as e:
+            print(f"Ошибка при получении сообщений из чата: {e}")
+
+        await asyncio.sleep(60)
+
+
+async def post_process_files():
+    """
+    Asynchronous function to process files and send messages.
+    Now waits for the moderation message before processing.
+    """
+    import asyncio
+    import concurrent.futures
+
+    # Wait for moderation message with more attempts and longer timeout
+    moderation_message = await get_moderation_message_from_chat()
+    print(moderation_message)
+
+    loop = asyncio.get_event_loop()
+
+    # Define a wrapper function that takes the message as input
+    def process_files_wrapper(message_text):
+        return file_postprocessor.process_files(message_text)
+
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        # Use the wrapper function and pass the message as an argument
+        crid_quantity = await loop.run_in_executor(
+            pool,
+            process_files_wrapper,
+            moderation_message
+        )
+
+    if crid_quantity > 0:
+        msg = f'{today_str}\n\n{pluralize("Crid", crid_quantity)} sent on moderation: {crid_quantity}'
+        await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
+    else:
+        msg = f'{today_str}\n\nНе удалось обработать файлы. Проверьте наличие файлов и формат сообщения.'
+        await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
+
+    print('Обработка завершена')
+    input('Нажмите что-то для завершения работы скрипта')
+
+
+# This is what's in the original code:
+# async def post_process_files():
+#     """
+#         Асинхронная функция для обработки файлов и отправки сообщения.
+#         Сохраняет прежнее название, но теперь работает без ручного ввода.
+#         """
+#     import asyncio
+#     import concurrent.futures
+#     from datetime import datetime
+#
+#     today_str = datetime.now().strftime('%d.%m.%Y')
+#
+#     loop = asyncio.get_event_loop()
+#
+#     with concurrent.futures.ThreadPoolExecutor() as pool:
+#         crid_quantity = await loop.run_in_executor(pool, file_postprocessor.process_files, get_moderation_message_from_chat)
+#
+#     if crid_quantity > 0:
+#         msg = f'{today_str}\n\n{pluralize("Crid", crid_quantity)} sent on moderation: {crid_quantity}'
+#         await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
+#     else:
+#         msg = f'{today_str}\n\nНе удалось обработать файлы. Проверьте наличие файлов и формат сообщения.'
+#         await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
+#
+#     print('Обработка завершена')
+#     input('Нажмите что-то для завершения работы скрипта')
+
+
 def setup_message_handler():
     """
-    Настраивает обработчик для сообщений в боте.
-    Использует метод get_updates для периодической проверки сообщений.
+    Sets up a message handler for the bot.
+    Continuously checks for messages with appropriate pattern.
     """
     import asyncio
     import threading
 
-    async def check_messages(chat_id):
+    async def check_messages():
         """
-        Асинхронная функция для проверки новых сообщений.
+        Asynchronous function to check for new messages.
         """
         last_update_id = 0
+        print("Starting to monitor for moderation messages...")
 
         while True:
             try:
-                # Получаем обновления с момента последнего полученного ID
-                updates = await bot.get_updates(offset=last_update_id + 1, timeout=30)
+                # Get updates since the last received ID
+                updates = await bot.get_updates(offset=last_update_id + 1, timeout=120)
 
                 for update in updates:
                     last_update_id = update.update_id
 
-                    # Проверяем сообщения
+                    # Check messages
                     if hasattr(update, 'message') and update.message and update.message.text:
                         if update.message.text.startswith("Сегодня отправила на модерацию"):
-                            # Отвечаем в чат о начале обработки
-                            await bot.send_message(
-                                chat_id=chat_id,
-                                text="Начинаю автоматическую обработку файлов..."
-                            )
+                            # Reply to chat about starting processing
 
-                            # Запускаем обработку файлов
+                            # Start file processing
                             await post_process_files()
 
-                            # Отправляем сообщение о завершении
-                            await bot.send_message(
-                                chat_id=settings.tg_recipient_id,
-                                text="Обработка файлов завершена."
-                            )
+                            # Send completion message
 
             except Exception as e:
-                print(f"Ошибка при проверке сообщений: {e}")
+                print(f"Error checking messages: {e}")
 
-            # Ждем небольшой промежуток времени перед следующей проверкой
+            # Wait a short time before next check
             await asyncio.sleep(5)
 
-    # Запускаем проверку сообщений в отдельном потоке
+    # Start message checking in a separate thread
     def run_async_loop():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -386,34 +438,8 @@ def setup_message_handler():
     thread = threading.Thread(target=run_async_loop, daemon=True)
     thread.start()
 
-    print("Обработчик сообщений для автоматической обработки файлов запущен")
+    print("Message handler for automatic file processing is running")
     return thread
-
-
-async def get_moderation_message_from_chat(chat_id=settings.tg_recipient_id):
-    """
-    Асинхронная функция для получения последнего сообщения о модерации
-    с использованием объекта Bot.
-    """
-    try:
-        updates = await bot.get_updates(limit=2)
-        print(updates)
-        for update in reversed(updates):
-            if (hasattr(update, 'message') and update.message and
-                    update.message.chat.id == chat_id and
-                    update.message.text and
-                    update.message.text.startswith("Сегодня отправила на модерацию")):
-                return update.message.text
-
-        # Если определенный chat_id недоступен, ищем в любом чате
-        for update in reversed(updates):
-            if (hasattr(update, 'message') and update.message and
-                    update.message.text and
-                    update.message.text.startswith("Сегодня отправила на модерацию")):
-                return update.message.text
-
-    except Exception as e:
-        print(f"Ошибка при получении сообщений из чата: {e}")
 
 
 async def main():
@@ -473,7 +499,7 @@ today = date.today()
 if today.weekday() == 0:
     report_web_file_url = settings.report_web_file_weekends_url
     report_app_file_url = settings.report_app_file_weekends_url
-elif today.weekday() in (5, 6):
+elif today.weekday() in (1, ):
     input('Сегодня выходной, по выходным мы отчеты не отправляем')
 
     def main():
