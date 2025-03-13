@@ -1,4 +1,3 @@
-import concurrent
 import json
 import os
 
@@ -362,34 +361,6 @@ async def post_process_files():
     input('Нажмите что-то для завершения работы скрипта')
 
 
-# This is what's in the original code:
-# async def post_process_files():
-#     """
-#         Асинхронная функция для обработки файлов и отправки сообщения.
-#         Сохраняет прежнее название, но теперь работает без ручного ввода.
-#         """
-#     import asyncio
-#     import concurrent.futures
-#     from datetime import datetime
-#
-#     today_str = datetime.now().strftime('%d.%m.%Y')
-#
-#     loop = asyncio.get_event_loop()
-#
-#     with concurrent.futures.ThreadPoolExecutor() as pool:
-#         crid_quantity = await loop.run_in_executor(pool, file_postprocessor.process_files, get_moderation_message_from_chat)
-#
-#     if crid_quantity > 0:
-#         msg = f'{today_str}\n\n{pluralize("Crid", crid_quantity)} sent on moderation: {crid_quantity}'
-#         await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
-#     else:
-#         msg = f'{today_str}\n\nНе удалось обработать файлы. Проверьте наличие файлов и формат сообщения.'
-#         await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
-#
-#     print('Обработка завершена')
-#     input('Нажмите что-то для завершения работы скрипта')
-
-
 def setup_message_handler():
     """
     Sets up a message handler for the bot.
@@ -492,6 +463,8 @@ async def main():
     await update_log_files()
     logging.info('Process finished successfully' + '-' * 50 + '\n')
     await post_process_files()
+    if today.weekday() in (0, 3):
+        file_postprocessor.concat_and_print_processed_crids(today)
 
 
 today = date.today()
@@ -499,7 +472,7 @@ today = date.today()
 if today.weekday() == 0:
     report_web_file_url = settings.report_web_file_weekends_url
     report_app_file_url = settings.report_app_file_weekends_url
-elif today.weekday() in (1, ):
+elif today.weekday() in (5, 6):
     input('Сегодня выходной, по выходным мы отчеты не отправляем')
 
     def main():

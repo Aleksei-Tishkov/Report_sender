@@ -13,8 +13,8 @@ sender_password = os.getenv('GMAIL_APP_CODE')
 smtp_server = 'smtp.gmail.com'
 email_subject = os.getenv('EMAIL_SUBJECT')
 
-report_app_file_weekends_url = os.getenv('REPORT_FILE_INAPP_WEEKENDS')
-report_web_file_weekends_url = os.getenv('REPORT_FILE_WEB_WEEKENDS')
+REPORT_WEB_FILE_WEEKDAYS_URL = os.getenv('REPORT_FILE_INAPP_WEEKENDS')
+REPORT_APP_FILE_WEEKDAYS_URL = os.getenv('REPORT_FILE_WEB_WEEKENDS')
 
 report_web_file_weekdays_url = os.getenv('REPORT_FILE_WEB_WEEKDAYS')
 report_app_file_weekdays_url = os.getenv('REPORT_FILE_INAPP_WEEKDAYS')

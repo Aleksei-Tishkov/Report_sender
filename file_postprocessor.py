@@ -1,6 +1,10 @@
+import datetime
 import json
 import os
+import struct
+
 import pandas as pd
+import xxhash as xxhash
 from openpyxl import Workbook
 from datetime import date, timedelta
 
@@ -35,9 +39,6 @@ def process_files(message_text):
         Теперь работает в автоматическом режиме без ручного ввода.
         """
     import re
-    import os
-    import json
-    import pandas as pd
 
     if not message_text or not message_text.startswith("Сегодня отправила на модерацию"):
         print("Не найдено подходящее сообщение для обработки")
@@ -164,3 +165,37 @@ def get_stuck_crids_from_json(today, json_path):
     duplicate_crids = set(crid_counts[crid_counts > 1].index)
 
     return duplicate_crids, previous_day_crids
+
+
+def concat_and_print_processed_crids(today):
+    with open(json_processed_path, "r") as file:
+        data = json.load(file)
+
+    start_date = datetime.strptime('2024-10-16', '%Y-%m-%d')
+
+    def hash_and_convert(val, seed=1029384756):
+        dsp_id, val = val.split('.', maxsplit=1)
+        val = xxhash.xxh32(val.encode(), seed=seed).intdigest()
+        val = struct.unpack("l", struct.pack("L", val))[0]
+        return f'{dsp_id}.{val}'
+
+    result_elements = set()
+    result_list = []
+    for date_str, values in data.items():
+        current_date = datetime.strptime(date_str, "%Y-%m-%d")
+        if start_date <= current_date <= today:
+            if isinstance(values, dict):
+                for value in values['crids']:
+                    value = hash_and_convert(value)
+                    result_list.append(value)
+                    result_elements.add(value)
+            else:
+                for value in values:
+                    value = hash_and_convert(value)
+                    result_list.append(value)
+                    result_elements.add(value)
+
+    formatted_string = ", ".join(f"'{item}'" for item in result_elements)
+
+    print(f"Сформированная строка: \n{formatted_string}\n")
+    print(f"Общее количество элементов: {len(result_elements)}")
