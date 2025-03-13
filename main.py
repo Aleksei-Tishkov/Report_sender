@@ -358,7 +358,6 @@ async def post_process_files():
         await send_message_with_retry(chat_id=settings.tg_recipient_id, text=msg)
 
     print('Обработка завершена')
-    input('Нажмите что-то для завершения работы скрипта')
 
 
 def setup_message_handler():
@@ -464,7 +463,7 @@ async def main():
     logging.info('Process finished successfully' + '-' * 50 + '\n')
     await post_process_files()
     if today.weekday() in (0, 3):
-        file_postprocessor.concat_and_print_processed_crids(today)
+        file_postprocessor.concat_and_print_processed_crids(today, crid_hashing_seed)
 
 
 today = date.today()
@@ -505,6 +504,8 @@ txt_path = os.path.join(log_path, 'txt_log.txt')
 message_high_text = settings.message_high_text
 message_low_text = settings.message_low_text
 
+crid_hashing_seed = settings.crid_hashing_seed
+
 bot = Bot(token=settings.bot_token)
 
 high_priority_count = 0
@@ -531,7 +532,8 @@ today_creatives, today_variants = set(), set()
 
 if __name__ == '__main__':
     #try:
-    asyncio.run(main())  # Запускаем событийный цикл только один раз
+    asyncio.run(main())
+    input('Нажмите что-то для завершения работы скрипта')
     #except Exception as e:
         #input(f'Process terminated with Exception: {e}')
         #logging.exception(e)

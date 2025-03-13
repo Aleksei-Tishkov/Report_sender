@@ -1,12 +1,12 @@
-import datetime
 import json
 import os
 import struct
+from time import strptime
 
 import pandas as pd
 import xxhash as xxhash
 from openpyxl import Workbook
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 
 import settings
 
@@ -167,13 +167,13 @@ def get_stuck_crids_from_json(today, json_path):
     return duplicate_crids, previous_day_crids
 
 
-def concat_and_print_processed_crids(today):
+def concat_and_print_processed_crids(today, seed):
     with open(json_processed_path, "r") as file:
         data = json.load(file)
 
-    start_date = datetime.strptime('2024-10-16', '%Y-%m-%d')
+    start_date = date.fromisoformat('2024-10-16')
 
-    def hash_and_convert(val, seed=1029384756):
+    def hash_and_convert(val, seed=seed):
         dsp_id, val = val.split('.', maxsplit=1)
         val = xxhash.xxh32(val.encode(), seed=seed).intdigest()
         val = struct.unpack("l", struct.pack("L", val))[0]
@@ -182,7 +182,7 @@ def concat_and_print_processed_crids(today):
     result_elements = set()
     result_list = []
     for date_str, values in data.items():
-        current_date = datetime.strptime(date_str, "%Y-%m-%d")
+        current_date = datetime.strptime(date_str, "%Y-%m-%d").date()
         if start_date <= current_date <= today:
             if isinstance(values, dict):
                 for value in values['crids']:
@@ -197,5 +197,5 @@ def concat_and_print_processed_crids(today):
 
     formatted_string = ", ".join(f"'{item}'" for item in result_elements)
 
-    print(f"Сформированная строка: \n{formatted_string}\n")
+    print(f"Список кридов, отправленных на модерацию за все время: \n{formatted_string}\n")
     print(f"Общее количество элементов: {len(result_elements)}")
