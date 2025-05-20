@@ -1,3 +1,4 @@
+import csv
 import json
 import os
 
@@ -168,7 +169,7 @@ def process_df(df: pandas.DataFrame):
 
     second_group = first_group.groupby(['adomain']).agg({
         'dcid': lambda x: '\n'.join(sorted(set(map(str, x)))),
-        'dcrid': lambda x: '\n'.join(sorted(set('\n'.join(map(str, x)).split('\n')))),
+        'dcrid': lambda x: '\n'.join(sorted(set(map(lambda val: f"\u200B{str(val)}", x)))),
         'count': 'sum',
         'variant_id': lambda x: ', '.join(sorted(set(', '.join(map(str, x)).split(', '))))  # Учитываем variant_id
     }).reset_index()
@@ -188,8 +189,8 @@ def check_and_attach(message, d):
     for filename, dataframe in d.items():
         if len(dataframe.index) > 0:
             attachment = MIMEBase('application', 'octet-stream')
-            dataframe.to_csv(f'{file_path}//{today_str}//{filename}_{today_str}.csv', index=False)
-            csv_data = dataframe.to_csv(index=False)
+            dataframe.to_csv(f'{file_path}//{today_str}//{filename}_{today_str}.csv', index=False, quoting=csv.QUOTE_NONNUMERIC)
+            csv_data = dataframe.to_csv(index=False, quoting=csv.QUOTE_NONNUMERIC)
             attachment.set_payload(csv_data.encode('utf-8'))
             encoders.encode_base64(attachment)
             attachment.add_header('Content-Disposition', f'attachment; filename="{filename}_{today_str}.csv"')
